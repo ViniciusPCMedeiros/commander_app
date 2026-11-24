@@ -1,0 +1,6 @@
+-- Seed padrão: banco limpo. Nenhum jogador, deck ou partida é criado aqui.
+-- A conta root é criada pelo ./start.sh (scripts/ensure-root.mjs) com o
+-- ROOT_EMAIL / ROOT_PASSWORD que você definir.
+--
+-- Dados de exemplo (Ana, Bruno, Carla, decks e partidas) para testes locais:
+--   ./start.sh reset --demo     (usa supabase/seed.demo.sql)
