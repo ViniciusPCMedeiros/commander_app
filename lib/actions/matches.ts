@@ -6,6 +6,7 @@ import { eliminationKind } from "@/lib/elimination";
 import { MATCH_NOTES_MAX } from "@/lib/format";
 import { isModerator, isRoot } from "@/lib/roles";
 import type { Deck } from "@/lib/types";
+import { scheduleAchievementSync } from "@/lib/achievement-sync";
 
 export interface MatchInput {
   played_at: string;
@@ -23,6 +24,8 @@ export interface MatchInput {
 }
 
 function revalidateAll() {
+  // Partida nova, aprovada, rejeitada, corrigida ou excluída muda conquistas
+  scheduleAchievementSync();
   revalidatePath("/");
   revalidatePath("/matches");
   revalidatePath("/decks");

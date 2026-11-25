@@ -3,15 +3,16 @@ export type EliminationKind = "opponent" | "self" | "other";
 
 /**
  * `points` entra no ranking: para "opponent", é o que ganha quem eliminou (mais
- * difícil vale mais); para "self", é a penalidade de quem morreu por conta própria.
+ * difícil vale mais; 0 = conta como abate, mas não pontua); para "self", é a
+ * penalidade de quem morreu por conta própria.
  * Os valores valem para todo o histórico (o ranking é recalculado a partir dele).
  */
 export const ELIMINATION_REASONS: { value: string; kind: EliminationKind; points: number }[] = [
   { value: "Combate", kind: "opponent", points: 1 },
   { value: "Dano de Comandante", kind: "opponent", points: 2 },
-  { value: "Combo", kind: "opponent", points: 1 },
-  { value: "Veneno", kind: "opponent", points: 2 },
-  { value: "Mill (grimório vazio) do inimigo", kind: "opponent", points: 1 },
+  { value: "Combo", kind: "opponent", points: 0 },
+  { value: "Veneno", kind: "opponent", points: 1 },
+  { value: "Mill (grimório vazio) do inimigo", kind: "opponent", points: 2 },
   { value: "Drenagem do inimigo", kind: "opponent", points: 1 },
   { value: "Drenagem própria", kind: "self", points: -1 },
   { value: "Mill próprio", kind: "self", points: -1 },

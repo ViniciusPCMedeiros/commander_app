@@ -1,7 +1,8 @@
+import { ACHIEVEMENT_BY_ID, isHighlight, type Achievements } from "@/lib/achievements";
 import { CHANGELOG } from "@/lib/changelog";
 import type { PlayerMilestones } from "@/lib/types";
 
-export type MilestoneKind = "joined" | "first_match" | "first_win" | "release";
+export type MilestoneKind = "joined" | "first_match" | "first_win" | "release" | "achievement";
 
 export interface MilestoneEvent {
   kind: MilestoneKind;
@@ -16,13 +17,19 @@ export interface MilestoneEvent {
   borrowed?: boolean;
   /** Primeira partida que já foi vitória (não gera evento separado de primeira vitória). */
   wonFirst?: boolean;
+  /** Conquista liberada (kind "achievement"): id em lib/achievements.ts. */
+  achievementId?: string;
 }
 
 /**
  * Converte os marcos de cada jogador em eventos de linha do tempo, do mais recente
- * ao mais antigo. `releases` inclui as versões do app (histórico do grupo).
+ * ao mais antigo. `releases` inclui as versões do app e `achievements`, as
+ * conquistas raras, míticas e secretas (histórico do grupo).
  */
-export function milestoneEvents(rows: PlayerMilestones[], { releases = false } = {}): MilestoneEvent[] {
+export function milestoneEvents(
+  rows: PlayerMilestones[],
+  { releases = false, achievements }: { releases?: boolean; achievements?: Achievements } = {},
+): MilestoneEvent[] {
   const events: MilestoneEvent[] = [];
   for (const r of rows) {
     // Quem jogou antes de ter conta já fazia parte do grupo: entra na data mais antiga
@@ -62,7 +69,14 @@ export function milestoneEvents(rows: PlayerMilestones[], { releases = false } =
       });
     }
   }
+  if (achievements) {
+    const nameOf = new Map(achievements.players.map((p) => [p.id, p.name]));
+    for (const u of achievements.unlocks) {
+      if (!isHighlight(ACHIEVEMENT_BY_ID.get(u.id)!)) continue;
+      events.push({ kind: "achievement", at: u.at, userId: u.playerId, name: nameOf.get(u.playerId) ?? "?", achievementId: u.id });
+    }
+  }
   // Mais recente primeiro; no empate, "entrou" antes de "jogou" antes de "venceu" (lido de baixo para cima)
-  const order: Record<MilestoneKind, number> = { release: 0, joined: 1, first_match: 2, first_win: 3 };
+  const order: Record<MilestoneKind, number> = { release: 0, joined: 1, first_match: 2, first_win: 3, achievement: 4 };
   return events.sort((a, b) => b.at.localeCompare(a.at) || order[b.kind] - order[a.kind]);
 }

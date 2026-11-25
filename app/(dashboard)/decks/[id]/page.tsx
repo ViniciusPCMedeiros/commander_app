@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPips } from "@/components/color-pips";
 import { MatchCard } from "@/components/match-card";
+import { loadAchievements, unlocksByMatch } from "@/lib/achievements";
 import { requireUser } from "@/lib/auth";
 import { isRoot } from "@/lib/roles";
 import { commanderLabel, formatPct } from "@/lib/format";
 import { MATCH_SELECT } from "@/lib/newspaper";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { CollectionStatus, DeckCard, DeckStats, MatchWithParticipants } from "@/lib/types";
 import { AccessPanel } from "./access-panel";
 import { DeckCardList } from "./deck-card-list";
@@ -25,15 +27,19 @@ const front = (n: string) => n.split(" // ")[0].toLowerCase();
 export default async function DeckPage(props: PageProps<"/decks/[id]">) {
   const { id } = await props.params;
   const { supabase, profile } = await requireUser();
+  // Conquistas liberadas em cada partida (selinhos no card)
+  const achievementsLoad = loadAchievements(supabase);
 
   const { data: deck } = await supabase.from("deck_stats").select("*").eq("deck_id", id).maybeSingle<DeckStats>();
   if (!deck) notFound();
 
-  const [{ data: cards }, { data: collection }, { data: deckRow }, { data: matchIds }, { data: permissions }, { data: players }] = await Promise.all([
+  const [{ data: cards }, collection, { data: deckRow }, { count: matchCount }, { data: permissions }, { data: players }] = await Promise.all([
     supabase.from("deck_cards").select("*").eq("deck_id", id).order("is_commander", { ascending: false }).order("card_name").returns<DeckCard[]>(),
-    supabase.from("user_collection_status").select("*").eq("user_id", deck.owner_id).returns<CollectionStatus[]>(),
+    fetchAll<CollectionStatus>((from, to) =>
+      supabase.from("user_collection_status").select("*").eq("user_id", deck.owner_id).order("id").range(from, to),
+    ),
     supabase.from("decks").select("moxfield_url").eq("id", id).single(),
-    supabase.from("match_participants").select("match_id").eq("deck_id", id),
+    supabase.from("match_participants").select("match_id", { count: "exact", head: true }).eq("deck_id", id),
     supabase
       .from("deck_permissions")
       .select("user_id, user:users!deck_permissions_user_id_fkey ( name )")
@@ -45,13 +51,13 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
 
   const { data: matches } = await supabase
     .from("matches")
-    .select(MATCH_SELECT)
-    .in("id", (matchIds ?? []).map((m) => m.match_id))
+    .select(`${MATCH_SELECT}, this_deck:match_participants!inner ( deck_id )`)
+    .eq("this_deck.deck_id", id)
     .order("played_at", { ascending: false })
     .limit(6)
     .returns<MatchWithParticipants[]>();
 
-  const byName = new Map((collection ?? []).map((c) => [front(c.card_name), c]));
+  const byName = new Map(collection.map((c) => [front(c.card_name), c]));
   const mainCards = (cards ?? []).filter((c) => !c.is_commander);
   const proxies = (cards ?? []).filter((c) => c.is_proxy);
   // Proxies não consomem cópia física: ficam fora dos alertas da coleção
@@ -65,6 +71,7 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
 
   const canEdit = isRoot(profile.role) || profile.id === deck.owner_id;
 
+  const matchUnlocks = unlocksByMatch(await achievementsLoad);
   return (
     <div className="space-y-6">
       <PageHeader
@@ -98,7 +105,7 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
                   deckId={id}
                   deckName={deck.deck_name}
                   isActive={deck.is_active}
-                  hasMatches={(matchIds ?? []).length > 0}
+                  hasMatches={(matchCount ?? 0) > 0}
                 />}
             </>
           ) : undefined
@@ -209,7 +216,7 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
         {(matches ?? []).length === 0 && <p className="text-sm text-muted-foreground">Ainda não jogou.</p>}
         <div className="grid gap-4 md:grid-cols-2">
           {(matches ?? []).map((m) => (
-            <MatchCard key={m.id} match={m} />
+            <MatchCard key={m.id} match={m} achievements={matchUnlocks.get(m.id)} />
           ))}
         </div>
       </div>

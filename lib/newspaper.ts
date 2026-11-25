@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateAICompletion } from "@/lib/ai";
 import { commanderLabel, formatDate, HIDDEN_PLAYER } from "@/lib/format";
 import { scoreMatch } from "@/lib/scoring";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import { ACHIEVEMENT_BY_ID, isHighlight, loadAchievements, RARITY_LABEL } from "@/lib/achievements";
 import type { MatchWithParticipants } from "@/lib/types";
 
 export const MATCH_SELECT = `
@@ -35,6 +37,8 @@ interface WeekSummary {
   firstWins: string[];
   /** Sequências de vitórias em andamento (2+). */
   streaks: [string, number][];
+  /** Conquistas raras, míticas e secretas liberadas na semana; `others`: quantas comuns/incomuns. */
+  achievements: { highlights: { player: string; name: string; rarity: string; description: string | null }[]; others: number };
 }
 
 interface ScoredRow {
@@ -106,15 +110,19 @@ export async function buildWeekSummary(supabase: SupabaseClient, weekStart: Date
   const winners = parts.filter((p) => p.is_winner);
 
   // Contexto geral: todas as partidas aprovadas até o fim da semana
-  const [{ data: history }, { data: users }, { data: milestones }] = await Promise.all([
-    supabase
-      .from("approved_participations")
-      .select("match_id, pilot_id, is_winner, elimination_reason, eliminated_by, played_at")
-      .lte("played_at", weekEnd.toISOString())
-      .order("played_at", { ascending: true })
-      .returns<ScoredRow[]>(),
+  const [history, { data: users }, { data: milestones }, allAchievements] = await Promise.all([
+    fetchAll<ScoredRow>((from, to) =>
+      supabase
+        .from("approved_participations")
+        .select("match_id, pilot_id, is_winner, elimination_reason, eliminated_by, played_at")
+        .lte("played_at", weekEnd.toISOString())
+        .order("played_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     supabase.from("users").select("id, name, role"),
     supabase.from("player_milestones").select("user_id, player_name, first_match_at, first_win_at"),
+    loadAchievements(supabase),
   ]);
   // O root é invisível para o grupo: o jornal fica salvo e é lido por todos, então
   // mesmo quando o root gera a edição o nome dele não pode aparecer.
@@ -160,9 +168,23 @@ export async function buildWeekSummary(supabase: SupabaseClient, weekStart: Date
     .map(([id, n]) => [nameOf(id)!, n] as [string, number])
     .sort((a, b) => b[1] - a[1]);
 
+  // Conquistas da semana (o root não ganha conquistas)
+  const weekUnlocks = allAchievements.unlocks.filter((u) => inWeek(u.at));
+  const highlights = weekUnlocks
+    .map((u) => ({ u, a: ACHIEVEMENT_BY_ID.get(u.id)! }))
+    .filter(({ a }) => isHighlight(a))
+    .map(({ u, a }) => ({
+      player: nameOf(u.playerId) ?? HIDDEN_PLAYER,
+      name: a.name,
+      rarity: a.secret ? "Secreta" : RARITY_LABEL[a.rarity],
+      // Secretas: a condição não vai para o jornal
+      description: a.secret ? null : a.description,
+    }));
+
   return {
     weekStart,
     weekEnd,
+    achievements: { highlights, others: weekUnlocks.length - highlights.length },
     matches,
     winsByPlayer: countBy(winners, (p) => p.pilot?.name ?? HIDDEN_PLAYER),
     gamesByPlayer: countBy(parts, (p) => p.pilot?.name ?? HIDDEN_PLAYER),
@@ -217,7 +239,7 @@ function summaryToPrompt(s: WeekSummary): string {
     `Partidas por jogador: ${s.gamesByPlayer.map(([n, c]) => `${n}: ${c}`).join(", ") || "nenhuma"}.`,
     `Eliminações causadas: ${s.killsByPlayer.map(([n, c]) => `${n}: ${c}`).join(", ") || "não registradas"}.`,
     "",
-    "PONTOS DA SEMANA (vitória +4; abate +1 ou +2 conforme o tipo; morte por conta própria −1):",
+    "PONTOS DA SEMANA (vitória +4; abate de 0 a +2 conforme o tipo — combo conta como abate, mas não pontua; morte por conta própria −1):",
     ...s.weekScores.map(
       (w) => `- ${w.name}: ${w.points} pts (${w.wins}V, ${w.kills} abates, ${w.deaths} mortes em ${w.games} partidas)`,
     ),
@@ -231,6 +253,11 @@ function summaryToPrompt(s: WeekSummary): string {
     `Primeira partida no grupo esta semana: ${s.firstMatches.join(", ") || "ninguém"}.`,
     `Primeira vitória da vida no grupo esta semana: ${s.firstWins.join(", ") || "ninguém"}.`,
     `Sequências de vitórias em andamento: ${s.streaks.map(([n, c]) => `${n} (${c} seguidas)`).join(", ") || "nenhuma"}.`,
+    `Conquistas raras, míticas e secretas liberadas esta semana: ${
+      s.achievements.highlights
+        .map((h) => `${h.player} — ${h.name} (${h.rarity}${h.description ? `: ${h.description}` : ", condição secreta"})`)
+        .join("; ") || "nenhuma"
+    }. Outras conquistas comuns/incomuns liberadas: ${s.achievements.others}.`,
     "",
     "PARTIDAS DA SEMANA:",
     ...lines,
@@ -281,6 +308,13 @@ function fallbackNewspaper(s: WeekSummary): string {
           ...s.killsByPlayer.map(([n, c]) => `- ${n}: ${c} eliminaç${c === 1 ? "ão" : "ões"}`),
         ]
       : []),
+    ...(s.achievements.highlights.length
+      ? [
+          "",
+          "#### 🎖️ Conquistas da semana",
+          ...s.achievements.highlights.map((h) => `- ${h.player} liberou **${h.name}** (${h.rarity.toLowerCase()})`),
+        ]
+      : []),
     ...(s.borrowed.length
       ? [
           "",
@@ -309,6 +343,9 @@ Uma lista com os pontos de cada jogador na semana, do maior para o menor, com vi
 
 #### 📈 Sobe e desce
 Movimentos no ranking geral: quem subiu, quem caiu, quem estreou, sequências e primeiras vitórias.
+
+#### 🎖️ Conquistas da semana
+Só se houver conquistas raras, míticas ou secretas na semana: quem liberou o quê, em tom de cerimônia. Nunca revele a condição de uma conquista secreta.
 
 #### 🔁 Empréstimos
 Só se houver decks emprestados: quem pilotou o deck de quem e como foi.

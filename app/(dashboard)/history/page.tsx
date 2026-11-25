@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { MilestoneItem, MilestoneList } from "@/components/milestone-item";
+import { loadAchievements } from "@/lib/achievements";
 import { requireUser } from "@/lib/auth";
 import { formatMonth } from "@/lib/format";
 import { milestoneEvents, type MilestoneEvent } from "@/lib/milestones";
@@ -11,9 +12,12 @@ export const metadata: Metadata = { title: "Histórico" };
 
 export default async function HistoryPage() {
   const { supabase } = await requireUser();
-  const { data } = await supabase.from("player_milestones").select("*").returns<PlayerMilestones[]>();
+  const [{ data }, achievements] = await Promise.all([
+    supabase.from("player_milestones").select("*").returns<PlayerMilestones[]>(),
+    loadAchievements(supabase),
+  ]);
   const rows = data ?? [];
-  const events = milestoneEvents(rows, { releases: true });
+  const events = milestoneEvents(rows, { releases: true, achievements });
 
   // Agrupa por mês (eventos já vêm do mais recente ao mais antigo)
   const months: { label: string; events: MilestoneEvent[] }[] = [];
@@ -36,7 +40,7 @@ export default async function HistoryPage() {
         banner="historico"
         eyebrow="Crônicas"
         title="Histórico do grupo"
-        description="Quando cada membro entrou, a primeira partida, a primeira vitória (partidas aprovadas) e as versões do Mesão."
+        description="Quando cada membro entrou, a primeira partida, a primeira vitória, as conquistas raras e míticas (partidas aprovadas) e as versões do Mesão."
       />
 
       <div className="grid grid-cols-3 gap-3">
@@ -70,7 +74,7 @@ export default async function HistoryPage() {
             <CardContent>
               <MilestoneList>
                 {m.events.map((e) => (
-                  <MilestoneItem key={`${e.kind}-${e.userId}-${e.release?.version ?? ""}`} event={e} />
+                  <MilestoneItem key={`${e.kind}-${e.userId}-${e.release?.version ?? e.achievementId ?? ""}`} event={e} />
                 ))}
               </MilestoneList>
             </CardContent>

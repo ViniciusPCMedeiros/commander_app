@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { commanderLabel, HIDDEN_PLAYER } from "@/lib/format";
 import { scoreMatch } from "@/lib/scoring";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 export type Period = "all" | "month" | "30d" | "year";
 export type SortKey = "points" | "wins" | "winrate" | "games";
@@ -140,16 +141,20 @@ const sessionDay = (iso: string) =>
 
 export async function loadRanking(supabase: SupabaseClient, period: Period) {
   const start = periodStart(period);
-  let query = supabase
-    .from("approved_participations")
-    .select(
-      "match_id, pilot_id, deck_id, deck_owner_id, commander_snapshot, color_identity_snapshot, is_winner, elimination_reason, eliminated_by, played_at",
-    )
-    .order("played_at", { ascending: true });
-  if (start) query = query.gte("played_at", start.toISOString());
+  const page = (from: number, to: number) => {
+    let query = supabase
+      .from("approved_participations")
+      .select(
+        "match_id, pilot_id, deck_id, deck_owner_id, commander_snapshot, color_identity_snapshot, is_winner, elimination_reason, eliminated_by, played_at",
+      )
+      .order("played_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (start) query = query.gte("played_at", start.toISOString());
+    return query.range(from, to).returns<Participation[]>();
+  };
 
-  const [{ data: parts }, { data: users }, { data: decks }] = await Promise.all([
-    query.returns<Participation[]>(),
+  const [parts, { data: users }, { data: decks }] = await Promise.all([
+    fetchAll(page),
     supabase.from("users").select("id, name, avatar_url"),
     supabase
       .from("decks")

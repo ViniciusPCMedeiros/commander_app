@@ -8,6 +8,9 @@ export const WIN_POINTS = 4;
 
 const reason = (value: string | null | undefined) => ELIMINATION_REASONS.find((r) => r.value === value);
 
+/** Abate: eliminação causada por um oponente — conta como abate mesmo valendo 0 ponto (combo). */
+export const isKill = (value: string | null | undefined) => reason(value)?.kind === "opponent";
+
 /** Pontos que um abate dá para quem eliminou (0 se o motivo não for causado por oponente). */
 export const killPoints = (value: string | null | undefined) => {
   const r = reason(value);
@@ -50,8 +53,8 @@ export function scoreMatch(participants: ScoredParticipant[]): Map<string, Match
   for (const victim of participants) {
     if (!victim.eliminated_by || victim.is_winner) continue;
     const killer = scores.get(victim.eliminated_by);
+    if (!killer || !isKill(victim.elimination_reason)) continue;
     const pts = killPoints(victim.elimination_reason);
-    if (!killer || !pts) continue;
     killer.points += pts;
     killer.kills++;
     killer.killsByReason[victim.elimination_reason!] = (killer.killsByReason[victim.elimination_reason!] ?? 0) + 1;

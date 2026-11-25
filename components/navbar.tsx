@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
+  Crosshair,
   Crown,
   History,
   Layers,
@@ -39,6 +40,7 @@ const LINKS = [
   { href: "/ranking", label: "Ranking", icon: Medal },
   { href: "/decks", label: "Decks", icon: Crown },
   { href: "/newspapers", label: "Jornais", icon: Newspaper },
+  { href: "/rivalries", label: "Rivalidades", icon: Crosshair },
   { href: "/collection", label: "Coleção", icon: Layers },
   { href: "/history", label: "Histórico", icon: History },
 ];
@@ -126,7 +128,8 @@ export function Navbar({
                   isActive(href) && "text-primary after:opacity-100",
                 )}
               >
-                <Icon className="size-3.5 opacity-80" />
+                {/* Entre 1024 e 1280px os ícones saem para caber todos os itens (com Admin) */}
+                <Icon className="hidden size-3.5 opacity-80 xl:block" />
                 {label}
               </Link>
             ))}

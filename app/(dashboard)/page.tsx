@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { MatchCard } from "@/components/match-card";
+import { loadAchievements, unlocksByMatch } from "@/lib/achievements";
 import { isAIConfigured } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { commanderLabel, formatPct, initials } from "@/lib/format";
@@ -18,6 +19,8 @@ import { PageHeader } from "@/components/page-header";
 
 export default async function DashboardPage() {
   const { supabase, profile } = await requireUser();
+  // Conquistas liberadas em cada partida (selinhos no card)
+  const achievementsLoad = loadAchievements(supabase);
 
   const [players, decks, approvedCount, pendingCount, activeDecks, newspaper, recent] = await Promise.all([
     supabase.from("player_stats").select("*").returns<PlayerStats[]>(),
@@ -59,6 +62,7 @@ export default async function DashboardPage() {
     { label: "Aguardando moderação", value: pendingCount.count ?? 0, icon: Hourglass, href: "/matches?tab=queue" },
   ];
 
+  const matchUnlocks = unlocksByMatch(await achievementsLoad);
   return (
     <div className="space-y-6">
       <PageHeader
@@ -201,7 +205,7 @@ export default async function DashboardPage() {
               </Link>
             </div>
             {(recent.data ?? []).map((m) => (
-              <MatchCard key={m.id} match={m} />
+              <MatchCard key={m.id} match={m} achievements={matchUnlocks.get(m.id)} />
             ))}
           </div>
         </div>

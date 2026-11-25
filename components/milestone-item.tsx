@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { Repeat, Sparkles, Swords, Trophy, UserPlus } from "lucide-react";
+import { Award, Repeat, Sparkles, Swords, Trophy, UserPlus } from "lucide-react";
+import { AchievementChip, AchievementIcon } from "@/components/achievement-badge";
+import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import { Badge } from "@/components/ui/badge";
 import { commanderLabel, formatDate } from "@/lib/format";
 import type { MilestoneEvent, MilestoneKind } from "@/lib/milestones";
@@ -10,6 +12,7 @@ const STYLE: Record<MilestoneKind, { icon: typeof UserPlus; className: string }>
   first_match: { icon: Swords, className: "bg-zinc-500/15 text-zinc-200 ring-zinc-500/30" },
   first_win: { icon: Trophy, className: "bg-amber-500/15 text-amber-300 ring-amber-500/30" },
   release: { icon: Sparkles, className: "bg-primary/15 text-primary ring-primary/40" },
+  achievement: { icon: Award, className: "" },
 };
 
 /** Um marco na linha do tempo. `showName=false` no perfil, onde o jogador já é conhecido. */
@@ -34,11 +37,19 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
     </>
   );
 
+  const achievement = event.achievementId ? ACHIEVEMENT_BY_ID.get(event.achievementId) : undefined;
+
   return (
     <li className="relative flex gap-3 pb-6 last:pb-0">
-      <span className={cn("relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full ring-1", className)}>
-        <Icon className="size-4" />
-      </span>
+      {achievement ? (
+        <AchievementIcon achievement={achievement} className="relative z-10 size-8 ring-1" />
+      ) : (
+        <span
+          className={cn("relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full ring-1", className)}
+        >
+          <Icon className="size-4" />
+        </span>
+      )}
       <div className="min-w-0 flex-1 pt-1 text-sm">
         <p>
           {event.release && (
@@ -47,6 +58,12 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
                 Mesão v{event.release.version}
               </Link>{" "}
               — {event.release.title}
+            </>
+          )}
+          {achievement && (
+            <>
+              {who ?? "Liberou"}
+              {who && " liberou"} a conquista <AchievementChip achievement={achievement} />
             </>
           )}
           {event.kind === "joined" && <>{who ?? "Entrou"}{who && " entrou"} no grupo</>}

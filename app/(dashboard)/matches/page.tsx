@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MatchCard } from "@/components/match-card";
+import { loadAchievements, unlocksByMatch } from "@/lib/achievements";
 import { requireUser } from "@/lib/auth";
 import { MATCH_SELECT } from "@/lib/newspaper";
 import { isModerator, isRoot } from "@/lib/roles";
@@ -17,6 +18,8 @@ export const metadata: Metadata = { title: "Partidas" };
 export default async function MatchesPage(props: PageProps<"/matches">) {
   const { tab } = await props.searchParams;
   const { supabase, profile } = await requireUser();
+  // Conquistas liberadas em cada partida (selinhos no card)
+  const achievementsLoad = loadAchievements(supabase);
   const isAdmin = isModerator(profile.role);
 
   const [{ data: history }, { data: queue }] = await Promise.all([
@@ -45,6 +48,7 @@ export default async function MatchesPage(props: PageProps<"/matches">) {
   );
   const pendingCount = visibleQueue.filter((m) => m.status === "pending").length;
 
+  const matchUnlocks = unlocksByMatch(await achievementsLoad);
   return (
     <div className="space-y-6">
       <PageHeader
@@ -80,6 +84,7 @@ export default async function MatchesPage(props: PageProps<"/matches">) {
             <MatchCard
               key={m.id}
               match={m}
+              achievements={matchUnlocks.get(m.id)}
               actions={isAdmin ? <ModerationActions matchId={m.id} status={m.status} canEdit={isRoot(profile.role)} /> : undefined}
             />
           ))}

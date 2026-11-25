@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { scheduleAchievementSync } from "@/lib/achievement-sync";
 import { requireUser } from "@/lib/auth";
 import { CARD_LIST_MAX } from "@/lib/format";
 import { isRoot } from "@/lib/roles";
@@ -103,6 +104,7 @@ export async function createDeck(_prev: DeckFormState, formData: FormData): Prom
   }
 
   revalidatePath("/decks");
+  scheduleAchievementSync();
   redirect(`/decks/${deck.id}`);
 }
 
@@ -131,6 +133,7 @@ export async function updateDeck(deckId: string, _prev: DeckFormState, formData:
   if (syncError) return { error: `Deck salvo, mas falhou ao atualizar os comandantes: ${syncError.message}` };
 
   revalidatePath("/decks");
+  scheduleAchievementSync();
   revalidateDeck(deckId);
   return { savedAt: Date.now() };
 }
@@ -140,6 +143,7 @@ export async function toggleDeckActive(deckId: string, isActive: boolean) {
   const { error } = await supabase.from("decks").update({ is_active: isActive }).eq("id", deckId);
   if (error) return { error: error.message };
   revalidatePath("/decks");
+  scheduleAchievementSync();
   revalidatePath(`/decks/${deckId}`);
   revalidatePath("/collection");
   return {};
@@ -164,6 +168,7 @@ export async function deleteDeck(deckId: string) {
   if (!data?.length) return { error: "Sem permissão para excluir este deck." };
 
   revalidatePath("/decks");
+  scheduleAchievementSync();
   revalidatePath("/collection");
   redirect("/decks");
 }
@@ -211,6 +216,7 @@ export async function setCardProxy(cardId: string, isProxy: boolean) {
 const frontKey = (name: string) => name.split(" // ")[0].trim().toLowerCase();
 
 function revalidateDeck(deckId: string) {
+  scheduleAchievementSync(); // decks completos, proxies
   revalidatePath(`/decks/${deckId}`);
   revalidatePath(`/decks/${deckId}/edit`);
   revalidatePath("/collection");

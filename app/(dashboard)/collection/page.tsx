@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardDescription } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { loadProxyCards } from "@/lib/proxies";
 import type { CollectionStatus } from "@/lib/types";
 import { CollectionTable, type CollectionFilter } from "./collection-table";
@@ -19,14 +20,16 @@ export default async function CollectionPage(props: PageProps<"/collection">) {
   const userId = typeof user === "string" && user ? user : profile.id;
   const editable = userId === profile.id;
 
-  const [{ data: cards }, { data: players }, proxies] = await Promise.all([
-    supabase.from("user_collection_status").select("*").eq("user_id", userId).order("card_name").returns<CollectionStatus[]>(),
+  const [cards, { data: players }, proxies] = await Promise.all([
+    fetchAll<CollectionStatus>((from, to) =>
+      supabase.from("user_collection_status").select("*").eq("user_id", userId).order("card_name").order("id").range(from, to),
+    ),
     supabase.from("users").select("id, name").order("name"),
     loadProxyCards(supabase, userId),
   ]);
   const initialFilter: CollectionFilter = tab === "needed" || tab === "proxies" ? tab : "all";
 
-  const list = cards ?? [];
+  const list = cards;
   const rotating = list.filter((c) => c.usage_status === "shared_rotation");
   const totalCopies = list.reduce((s, c) => s + c.owned_qty, 0);
   const freeCopies = list.reduce((s, c) => s + Math.max(0, c.balance), 0);

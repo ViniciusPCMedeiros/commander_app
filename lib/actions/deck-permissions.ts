@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { isRoot } from "@/lib/roles";
+import { scheduleAchievementSync } from "@/lib/achievement-sync";
 
 function revalidatePermissions(deckId: string) {
+  scheduleAchievementSync(); // "Chave da casa"
   revalidatePath("/decks");
   revalidatePath(`/decks/${deckId}`);
   revalidatePath("/players/[id]", "page");

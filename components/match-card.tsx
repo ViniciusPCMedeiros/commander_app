@@ -2,7 +2,9 @@ import Link from "next/link";
 import { CalendarDays, Repeat, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AchievementChip } from "@/components/achievement-badge";
 import { ColorPips } from "@/components/color-pips";
+import type { AchievementDef } from "@/lib/achievements";
 import { eliminationLabel } from "@/lib/elimination";
 import { commanderLabel, formatDateTime, HIDDEN_PLAYER } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -14,7 +16,16 @@ const STATUS: Record<string, { label: string; className: string }> = {
   rejected: { label: "Rejeitada", className: "bg-red-500/15 text-red-400 border-red-500/30" },
 };
 
-export function MatchCard({ match, actions }: { match: MatchWithParticipants; actions?: React.ReactNode }) {
+export function MatchCard({
+  match,
+  actions,
+  achievements,
+}: {
+  match: MatchWithParticipants;
+  actions?: React.ReactNode;
+  /** Conquistas liberadas nesta partida, por jogador (ver unlocksByMatch). */
+  achievements?: Map<string, AchievementDef[]>;
+}) {
   const participants = [...match.match_participants].sort(
     (a, b) => Number(b.is_winner) - Number(a.is_winner) || (a.seat_order ?? 9) - (b.seat_order ?? 9),
   );
@@ -65,6 +76,13 @@ export function MatchCard({ match, actions }: { match: MatchWithParticipants; ac
                       p.elimination_reason &&
                       ` · ${eliminationLabel(p.elimination_reason, p.eliminated_by ? nameById.get(p.eliminated_by) : null)}`}
                   </div>
+                  {achievements?.get(p.pilot_id) && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {achievements.get(p.pilot_id)!.map((a) => (
+                        <AchievementChip key={a.id} achievement={a} />
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <ColorPips colors={p.color_identity_snapshot} className="hidden sm:inline-flex" />
               </li>

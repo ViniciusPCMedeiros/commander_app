@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { frontFaceName, getCardImage, getCardsCollection } from "@/lib/scryfall";
 import type { ProxyCard } from "@/lib/types";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 const key = (name: string) => frontFaceName(name).toLowerCase();
 
@@ -11,25 +12,31 @@ const key = (name: string) => frontFaceName(name).toLowerCase();
  * que o jogador precisa e onde conseguir.
  */
 export async function loadProxyCards(supabase: SupabaseClient, userId: string): Promise<ProxyCard[]> {
-  const { data } = await supabase.from("user_proxy_cards").select("*").eq("user_id", userId).order("card_name");
-  const proxies = (data ?? []) as ProxyCard[];
+  const proxies = await fetchAll<ProxyCard>((from, to) =>
+    supabase.from("user_proxy_cards").select("*").eq("user_id", userId).order("card_name").range(from, to),
+  );
   if (!proxies.length) return proxies;
 
   const names = proxies.map((p) => p.card_name);
 
-  const [scryfall, { data: offers }] = await Promise.all([
+  const [scryfall, offers] = await Promise.all([
     getCardsCollection(names, { next: { revalidate: 86_400 } }).catch(() => ({ found: [], notFound: names })),
-    supabase
-      .from("user_collection_status")
-      .select("user_id, owner_name, card_name")
-      .eq("available_for_trade", true)
-      .gt("balance", 0)
-      .neq("user_id", userId),
+    fetchAll<{ user_id: string; owner_name: string; card_name: string }>((from, to) =>
+      supabase
+        .from("user_collection_status")
+        .select("user_id, owner_name, card_name")
+        .eq("available_for_trade", true)
+        .gt("balance", 0)
+        .neq("user_id", userId)
+        .order("user_id")
+        .order("card_name")
+        .range(from, to),
+    ),
   ]);
 
   const cardByName = new Map(scryfall.found.map((c) => [key(c.name), c]));
   const offersByName = new Map<string, { user_id: string; name: string }[]>();
-  for (const o of offers ?? []) {
+  for (const o of offers) {
     const k = key(o.card_name);
     offersByName.set(k, [...(offersByName.get(k) ?? []), { user_id: o.user_id, name: o.owner_name }]);
   }

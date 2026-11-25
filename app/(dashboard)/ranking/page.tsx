@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Flame, Info, Trophy } from "lucide-react";
+import { Award, Crosshair, Flame, Info, Trophy } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -107,6 +107,22 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
           eyebrow="Classificação"
           title="Ranking"
           description={`${data.matches} partida(s) aprovada(s) · ${PERIOD_LABEL[period].toLowerCase()}`}
+          actions={
+            <div className="flex flex-wrap gap-2">
+              {[
+                { href: "/rivalries", label: "Rivalidades", icon: Crosshair },
+                { href: "/achievements", label: "Conquistas", icon: Award },
+              ].map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-background/40 px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary/10"
+                >
+                  <Icon className="size-4" /> {label}
+                </Link>
+              ))}
+            </div>
+          }
         />
         {data.lastSession && (
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -158,8 +174,13 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
               <span>
                 {r.label} <span className="text-xs text-muted-foreground">({r.who})</span>
               </span>
-              <span className={cn("font-semibold tabular-nums", r.points > 0 ? "text-emerald-400" : "text-rose-400")}>
-                {r.points > 0 ? `+${r.points}` : r.points}
+              <span
+                className={cn(
+                  "tabular-nums",
+                  r.points > 0 ? "font-semibold text-emerald-400" : r.points < 0 ? "font-semibold text-rose-400" : "text-muted-foreground",
+                )}
+              >
+                {r.points > 0 ? `+${r.points}` : r.points < 0 ? r.points : "0 (conta como abate)"}
               </span>
             </div>
           ))}

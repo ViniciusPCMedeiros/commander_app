@@ -5,7 +5,9 @@ import { commanderLabel, formatDate, formatPct, HIDDEN_PLAYER } from "@/lib/form
 import { lastCompletedWeek } from "@/lib/newspaper";
 import { loadRanking, sortRows } from "@/lib/ranking";
 import { scoreMatch } from "@/lib/scoring";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { PlayerStats } from "@/lib/types";
+import { ACHIEVEMENT_BY_ID, ACHIEVEMENTS, loadAchievements, RARITY_LABEL } from "@/lib/achievements";
 
 const COLOR_NAMES: Record<string, string> = { W: "Branco", U: "Azul", B: "Preto", R: "Vermelho", G: "Verde" };
 
@@ -40,18 +42,22 @@ function tally<T>(rows: T[], keyFn: (r: T) => string | string[] | null | undefin
  * forma recente, assentos, decks, confrontos diretos e rivalidades.
  */
 async function buildPlayerDossier(supabase: SupabaseClient, userId: string) {
-  const [{ data: stats }, { data: all }, { data: users }, { data: decks }, ranking] = await Promise.all([
+  const [{ data: stats }, all, { data: users }, { data: decks }, ranking, achievements] = await Promise.all([
     supabase.from("player_stats").select("*").eq("user_id", userId).single<PlayerStats>(),
-    supabase
-      .from("approved_participations")
-      .select(
-        "match_id, pilot_id, deck_id, deck_owner_id, commander_snapshot, color_identity_snapshot, is_winner, seat_order, elimination_reason, eliminated_by, win_condition, played_at",
-      )
-      .order("played_at", { ascending: true })
-      .returns<Part[]>(),
+    fetchAll<Part>((from, to) =>
+      supabase
+        .from("approved_participations")
+        .select(
+          "match_id, pilot_id, deck_id, deck_owner_id, commander_snapshot, color_identity_snapshot, is_winner, seat_order, elimination_reason, eliminated_by, win_condition, played_at",
+        )
+        .order("played_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     supabase.from("users").select("id, name, role"),
     supabase.from("decks").select("id, name"),
     loadRanking(supabase, "all"),
+    loadAchievements(supabase),
   ]);
   if (!stats) throw new Error("Jogador não encontrado");
 
@@ -143,7 +149,7 @@ async function buildPlayerDossier(supabase: SupabaseClient, userId: string) {
     `JOGADOR: ${stats.player_name}`,
     `Grupo: ${players.length} jogadores com partidas, ${ranking.matches} partidas aprovadas no total.`,
     me
-      ? `Ranking por pontos: ${pos + 1}º de ${players.length}, com ${me.points} pts (média do grupo: ${fmt(avg((r) => r.points))} pts). Regra: vitória +4; abate +1 ou +2 conforme o tipo; morte por conta própria −1.`
+      ? `Ranking por pontos: ${pos + 1}º de ${players.length}, com ${me.points} pts (média do grupo: ${fmt(avg((r) => r.points))} pts). Regra: vitória +4; abate de 0 a +2 conforme o tipo (combo conta como abate, mas não pontua); morte por conta própria −1.`
       : "Ainda fora do ranking (sem partidas aprovadas).",
     `Partidas: ${stats.total_games}; vitórias: ${stats.total_wins} (${formatPct(stats.overall_winrate)}; taxa geral do grupo: ${formatPct(groupWinrate)}).`,
     me
@@ -159,6 +165,13 @@ async function buildPlayerDossier(supabase: SupabaseClient, userId: string) {
     `Mortes por tipo: ${list(tally(deaths, (p) => p.elimination_reason ?? "não informado"))}`,
     `Quem mais eliminou ${stats.player_name} (carrasco): ${list(executioners)}`,
     `Quem ${stats.player_name} mais eliminou: ${list(victims)}`,
+    `Conquistas liberadas (${achievements.unlocks.filter((u) => u.playerId === userId).length} de ${ACHIEVEMENTS.length}): ${
+      achievements.unlocks
+        .filter((u) => u.playerId === userId)
+        .map((u) => ACHIEVEMENT_BY_ID.get(u.id)!)
+        .map((a) => `${a.name} (${a.secret ? "secreta" : RARITY_LABEL[a.rarity].toLowerCase()})`)
+        .join(", ") || "nenhuma"
+    }`,
     mine.length
       ? `Primeira partida: ${formatDate(mine[0].played_at)}; última: ${formatDate(mine.at(-1)!.played_at)}.`
       : "",

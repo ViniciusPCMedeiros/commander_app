@@ -16,6 +16,49 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.3.0",
+    date: "2026-11-25T14:30:00-03:00",
+    title: "Rivalidades e conquistas",
+    changes: [
+      {
+        kind: "novo",
+        text: "Conquistas: 60 selos liberados pelas partidas, pela coleção e pelos decks, com raridade comum, incomum, rara e mítica — valem para todo o histórico, então quem já jogou já tem as suas. Uma vez liberada, a conquista é sua: só sai se a partida que a deu for rejeitada ou excluída.",
+      },
+      {
+        kind: "novo",
+        text: "Página de Conquistas com quem já liberou cada uma, quanto do grupo tem e quem foi a primeira pessoa a conseguir. Algumas são secretas: a condição só aparece depois que alguém liberar.",
+      },
+      {
+        kind: "novo",
+        text: "Perfil com as conquistas liberadas e o progresso das próximas; o card da partida mostra o selo de quem liberou algo nela.",
+      },
+      {
+        kind: "novo",
+        text: "Conquistas raras, míticas e secretas entram no histórico do grupo e ganham destaque na Gazeta da semana.",
+      },
+      {
+        kind: "novo",
+        text: "Página de Rivalidades: as duplas que mais se enfrentam e um quadro com o placar de abates, vitórias e mesas de cada jogador contra cada um.",
+      },
+      {
+        kind: "novo",
+        text: "Confronto direto entre dois jogadores: placar, como um eliminou o outro e as partidas que jogaram juntos.",
+      },
+      {
+        kind: "novo",
+        text: "Perfil do jogador com o Rival (com quem mais troca abates), o Freguês (quem mais elimina) e todos os confrontos diretos.",
+      },
+      {
+        kind: "correcao",
+        text: "Ranking, Gazeta, perfil e análises não vão mais ignorar partidas quando o histórico passar de 1000 participações; coleções com mais de 1000 cartas aparecem inteiras, e importar cartas soma certo nas coleções grandes.",
+      },
+      {
+        kind: "melhoria",
+        text: "Pontuação dos abates: eliminar por mill do inimigo passa a valer +2 e por veneno +1 (trocaram de valor); eliminar por combo continua contando como abate, mas não dá mais pontos. Vale para todo o histórico do ranking.",
+      },
+    ],
+  },
+  {
     version: "1.2.0",
     date: "2026-11-25T12:14:00-03:00",
     title: "IA ligada, mortes no ranking e no perfil",

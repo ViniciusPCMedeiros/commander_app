@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { getCardImage, getCardsCollection, getManaCost, parseDecklist } from "@/lib/scryfall";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import { scheduleAchievementSync } from "@/lib/achievement-sync";
 
 export async function importCollection(
   text: string,
@@ -19,8 +21,10 @@ export async function importCollection(
   const { found, notFound } = await getCardsCollection(parsed.map((p) => p.name));
 
   // Soma ao que já existe na coleção
-  const { data: existing } = await supabase.from("user_cards").select("card_name, quantity").eq("user_id", profile.id);
-  const existingQty = new Map((existing ?? []).map((e) => [e.card_name.toLowerCase(), e.quantity as number]));
+  const existing = await fetchAll<{ card_name: string; quantity: number }>((from, to) =>
+    supabase.from("user_cards").select("card_name, quantity").eq("user_id", profile.id).order("id").range(from, to),
+  );
+  const existingQty = new Map(existing.map((e) => [e.card_name.toLowerCase(), e.quantity]));
 
   const qtyByFront = new Map(parsed.map((p) => [p.name.split(" // ")[0].toLowerCase(), p.quantity]));
   const rows = new Map<string, Record<string, unknown>>();
@@ -47,6 +51,7 @@ export async function importCollection(
   }
 
   revalidatePath("/collection");
+  scheduleAchievementSync();
   return { imported: rows.size, notFound, skippedProxies };
 }
 
@@ -61,6 +66,7 @@ export async function updateCollectionCard(
   const { error } = await supabase.from("user_cards").update(patch).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/collection");
+  scheduleAchievementSync();
   return {};
 }
 
@@ -69,5 +75,6 @@ export async function deleteCollectionCard(id: string) {
   const { error } = await supabase.from("user_cards").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/collection");
+  scheduleAchievementSync();
   return {};
 }
