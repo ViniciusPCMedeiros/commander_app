@@ -40,6 +40,12 @@ export function commanderLabel(commander: string, partner?: string | null): stri
 }
 
 
+/** Limite de caracteres das notas da partida (também garantido no banco). */
+export const MATCH_NOTES_MAX = 500;
+
+/** Limite de caracteres das listas de cartas coladas (deck e importação) — folga para ~100 cartas. */
+export const CARD_LIST_MAX = 10_000;
+
 export const WIN_CONDITIONS = [
   "Combate",
   "Dano de Comandante",

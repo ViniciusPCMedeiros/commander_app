@@ -8,6 +8,7 @@ export async function importCollection(
   text: string,
 ): Promise<{ error?: string; imported?: number; notFound?: string[]; skippedProxies?: number }> {
   const { supabase, profile } = await requireUser();
+  if (text.length > 40_000) return { error: "Lista grande demais: importe em partes de até 1000 cartas." };
   const all = parseDecklist(text);
   // Proxy não é cópia física: não entra na coleção
   const parsed = all.filter((p) => !p.isProxy);

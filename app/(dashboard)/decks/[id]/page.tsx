@@ -14,7 +14,6 @@ import { commanderLabel, formatPct } from "@/lib/format";
 import { MATCH_SELECT } from "@/lib/newspaper";
 import type { CollectionStatus, DeckCard, DeckStats, MatchWithParticipants } from "@/lib/types";
 import { AccessPanel } from "./access-panel";
-import { PROXY_MARKER } from "@/lib/scryfall";
 import { DeckCardList } from "./deck-card-list";
 import { DeckOwnerActions } from "./deck-owner-actions";
 import { PageHeader } from "@/components/page-header";
@@ -65,9 +64,6 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
   const missing = physical.filter((c) => !byName.has(front(c.card_name)));
 
   const canEdit = isRoot(profile.role) || profile.id === deck.owner_id;
-  const listText = mainCards
-    .map((c) => `${c.quantity} ${c.card_name}${c.is_proxy ? ` ${PROXY_MARKER}` : ""}`)
-    .join("\n");
 
   return (
     <div className="space-y-6">
@@ -98,7 +94,12 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
                   </a>
                 </Button>
               )}
-              {canEdit && <DeckOwnerActions deckId={id} isActive={deck.is_active} currentList={listText} />}
+              {canEdit && <DeckOwnerActions
+                  deckId={id}
+                  deckName={deck.deck_name}
+                  isActive={deck.is_active}
+                  hasMatches={(matchIds ?? []).length > 0}
+                />}
             </>
           ) : undefined
         }

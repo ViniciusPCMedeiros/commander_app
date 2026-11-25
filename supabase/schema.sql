@@ -574,3 +574,136 @@ CREATE POLICY "Leitura autenticada deck_permissions" ON public.deck_permissions 
 DROP POLICY "Leitura autenticada ai_insights" ON public.ai_insights;
 CREATE POLICY "Leitura autenticada ai_insights" ON public.ai_insights FOR SELECT TO authenticated
   USING (NOT public.is_hidden_user(user_id) OR user_id = auth.uid() OR public.is_root());
+
+-- Decks aposentados que nunca entraram em partida podem ser excluídos pelo dono
+-- (ou root). Partidas pendentes também contam: o deck já está registrado nelas.
+-- A FK de match_participants (ON DELETE RESTRICT) continua como última barreira.
+CREATE OR REPLACE FUNCTION public.deck_has_matches(did UUID)
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (SELECT 1 FROM public.match_participants WHERE deck_id = did);
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+CREATE POLICY "Excluir decks sem partidas" ON public.decks FOR DELETE TO authenticated
+  USING (
+    (owner_id = auth.uid() OR public.is_root())
+    AND NOT is_active
+    AND NOT public.deck_has_matches(id)
+  );
+
+-- O root pode corrigir uma partida já registrada: data, condição de vitória,
+-- notas e os participantes (jogador, deck, assento, vencedor, eliminação).
+-- Tudo numa transação: ou a partida inteira é salva, ou nada muda.
+-- Os snapshots (dono, comandante e cores) de um deck que continua na partida
+-- são preservados; um deck novo recebe o snapshot do estado atual dele.
+CREATE OR REPLACE FUNCTION public.root_update_match(
+  p_match_id UUID,
+  p_played_at TIMESTAMPTZ,
+  p_win_condition TEXT,
+  p_notes TEXT,
+  p_participants JSONB
+) RETURNS VOID AS $$
+DECLARE
+  v_old JSONB;
+  v_inserted INT;
+BEGIN
+  IF NOT public.is_root() THEN
+    RAISE EXCEPTION 'Apenas o root edita partidas.' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE public.matches
+  SET played_at = p_played_at,
+      win_condition = NULLIF(btrim(p_win_condition), ''),
+      notes = NULLIF(btrim(p_notes), '')
+  WHERE id = p_match_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Partida não encontrada.';
+  END IF;
+
+  SELECT COALESCE(jsonb_object_agg(deck_id, jsonb_build_object(
+           'owner', deck_owner_id, 'commander', commander_snapshot, 'colors', to_jsonb(color_identity_snapshot))), '{}')
+  INTO v_old
+  FROM public.match_participants WHERE match_id = p_match_id;
+
+  DELETE FROM public.match_participants WHERE match_id = p_match_id;
+
+  INSERT INTO public.match_participants (
+    match_id, pilot_id, deck_id, deck_owner_id, commander_snapshot, color_identity_snapshot,
+    is_winner, seat_order, elimination_reason, eliminated_by)
+  SELECT
+    p_match_id, i.pilot_id, i.deck_id,
+    COALESCE((v_old -> i.deck_id::text ->> 'owner')::uuid, d.owner_id),
+    COALESCE(v_old -> i.deck_id::text ->> 'commander', d.commander_name || COALESCE(' + ' || d.partner_name, '')),
+    COALESCE(ARRAY(SELECT jsonb_array_elements_text(v_old -> i.deck_id::text -> 'colors')), d.color_identity),
+    i.is_winner, i.seat_order, NULLIF(i.elimination_reason, ''), i.eliminated_by
+  FROM jsonb_to_recordset(p_participants) AS i(
+    pilot_id UUID, deck_id UUID, seat_order INT, is_winner BOOLEAN, elimination_reason TEXT, eliminated_by UUID)
+  JOIN public.decks d ON d.id = i.deck_id;
+
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+  IF v_inserted <> jsonb_array_length(p_participants) THEN
+    RAISE EXCEPTION 'Deck não encontrado.';
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE EXECUTE ON FUNCTION public.root_update_match(UUID, TIMESTAMPTZ, TEXT, TEXT, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.root_update_match(UUID, TIMESTAMPTZ, TEXT, TEXT, JSONB) TO authenticated;
+
+-- Notas da partida limitadas a 500 caracteres (o formulário mostra o contador).
+-- NOT VALID: vale para inserções e edições novas sem barrar notas antigas maiores.
+ALTER TABLE public.matches
+  ADD CONSTRAINT matches_notes_length CHECK (char_length(notes) <= 500) NOT VALID;
+
+-- Garante que as linhas de comandante de deck_cards batem com decks.commander_name
+-- e decks.partner_name: cria a que falta, remove a de quem deixou de ser
+-- comandante e tira da lista comum a carta que é comandante (ex.: alguém colou o
+-- comandante pelo "Editar lista" quando a linha de comandante não existia).
+-- SECURITY INVOKER: o RLS de deck_cards (dono ou root) continua valendo.
+CREATE OR REPLACE FUNCTION public.sync_deck_commanders(p_deck_id UUID)
+RETURNS VOID AS $$
+DECLARE
+  v_names TEXT[];
+  v_keys TEXT[];
+BEGIN
+  SELECT array_remove(ARRAY[commander_name, partner_name], NULL) INTO v_names
+  FROM public.decks WHERE id = p_deck_id;
+  IF v_names IS NULL THEN
+    RAISE EXCEPTION 'Deck não encontrado.';
+  END IF;
+  SELECT COALESCE(array_agg(lower(split_part(n, ' // ', 1))), '{}') INTO v_keys FROM unnest(v_names) n;
+
+  DELETE FROM public.deck_cards c
+  WHERE c.deck_id = p_deck_id
+    AND (lower(split_part(c.card_name, ' // ', 1)) = ANY (v_keys)) <> c.is_commander;
+
+  INSERT INTO public.deck_cards (deck_id, card_name, quantity, is_commander, is_proxy)
+  SELECT p_deck_id, n, 1, true, false
+  FROM unnest(v_names) n
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.deck_cards c
+    WHERE c.deck_id = p_deck_id AND c.is_commander
+      AND lower(split_part(c.card_name, ' // ', 1)) = lower(split_part(n, ' // ', 1))
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY INVOKER SET search_path = public;
+
+REVOKE EXECUTE ON FUNCTION public.sync_deck_commanders(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.sync_deck_commanders(UUID) TO authenticated;
+
+-- Conserta os decks criados com lista colada antes da correção (a gravação das
+-- cartas falhava e o deck ficava sem a linha de comandante).
+SELECT public.sync_deck_commanders(id) FROM public.decks;
+
+-- approved_participations foi criada com "mp.*", e o Postgres fixa as colunas na
+-- criação: eliminated_by (adicionada depois) não aparecia na view. O ranking de
+-- pontos precisa dela para contar os abates. Colunas novas só podem ir no fim.
+CREATE OR REPLACE VIEW public.approved_participations
+WITH (security_invoker = true) AS
+SELECT
+  mp.id, mp.match_id, mp.pilot_id, mp.deck_id, mp.deck_owner_id, mp.commander_snapshot,
+  mp.color_identity_snapshot, mp.is_winner, mp.seat_order, mp.elimination_reason,
+  m.played_at, m.win_condition,
+  mp.eliminated_by
+FROM public.match_participants mp
+JOIN public.matches m ON m.id = mp.match_id
+WHERE m.status = 'approved';

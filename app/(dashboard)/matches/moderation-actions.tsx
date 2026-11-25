@@ -1,12 +1,13 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check, Loader2, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { deleteMatch, moderateMatch } from "@/lib/actions/matches";
 
-export function ModerationActions({ matchId, status }: { matchId: string; status: string }) {
+export function ModerationActions({ matchId, status, canEdit }: { matchId: string; status: string; canEdit?: boolean }) {
   const [pending, startTransition] = useTransition();
 
   const run = (fn: () => Promise<{ error?: string }>, ok: string) =>
@@ -36,6 +37,13 @@ export function ModerationActions({ matchId, status }: { matchId: string; status
           onClick={() => run(() => moderateMatch(matchId, "rejected"), "Partida rejeitada")}
         >
           <X /> Rejeitar
+        </Button>
+      )}
+      {canEdit && (
+        <Button asChild size="sm" variant="outline" disabled={pending}>
+          <Link href={`/matches/${matchId}/edit`}>
+            <Pencil /> Editar
+          </Link>
         </Button>
       )}
       <Button

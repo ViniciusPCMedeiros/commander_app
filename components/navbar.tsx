@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
   Crown,
@@ -12,6 +13,7 @@ import {
   MoreHorizontal,
   Newspaper,
   Shield,
+  Sparkles,
   Swords,
   User,
 } from "lucide-react";
@@ -25,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { APP_VERSION, readSeenVersion, subscribeSeenVersion } from "@/lib/changelog";
 import { initials } from "@/lib/format";
 import { isModerator, ROLE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -87,6 +90,9 @@ export function Navbar({
   logoutAction: () => Promise<void>;
 }) {
   const pathname = usePathname();
+  // Pontinho de "versão nova" até a pessoa abrir as novidades (no servidor, nada aparece)
+  const seenVersion = useSyncExternalStore(subscribeSeenVersion, readSeenVersion, () => APP_VERSION);
+  const hasNews = seenVersion !== APP_VERSION;
   const links = isModerator(profile.role)
     ? [...LINKS, { href: "/admin", label: "Admin", icon: Shield }]
     : LINKS;
@@ -128,7 +134,13 @@ export function Navbar({
           <div className="flex-1 lg:hidden" />
 
           <DropdownMenu>
-            <DropdownMenuTrigger className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <DropdownMenuTrigger
+              className="relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={hasNews ? `Menu da conta (novidades da v${APP_VERSION})` : "Menu da conta"}
+            >
+              {hasNews && (
+                <span className="absolute -top-0.5 -right-0.5 z-10 size-2.5 rounded-full bg-primary ring-2 ring-background" />
+              )}
               <Avatar className="size-8 ring-1 ring-primary/50">
                 {profile.avatar_url && (
                   <AvatarImage src={profile.avatar_url} alt={profile.name} />
@@ -152,6 +164,14 @@ export function Navbar({
               <DropdownMenuItem asChild>
                 <Link href={`/players/${profile.id}`}>
                   <User /> Meu perfil
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/changelog">
+                  <Sparkles /> Novidades
+                  <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {hasNews && <span className="size-2 rounded-full bg-primary" />}v{APP_VERSION}
+                  </span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>

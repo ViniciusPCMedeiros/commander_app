@@ -12,16 +12,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ColorPips } from "@/components/color-pips";
 import { NativeSelect } from "@/components/native-select";
-import { createMatch } from "@/lib/actions/matches";
+import { createMatch, updateMatch, type MatchInput } from "@/lib/actions/matches";
 import { ELIMINATION_GROUPS, ELIMINATION_REASONS, eliminationKind } from "@/lib/elimination";
-import { commanderLabel, WIN_CONDITIONS } from "@/lib/format";
+import { commanderLabel, MATCH_NOTES_MAX, WIN_CONDITIONS } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Deck } from "@/lib/types";
 
 type Seat = { key: number; pilot_id: string; deck_id: string; elimination_reason: string; eliminated_by: string };
 
-function nowLocalInput() {
-  const d = new Date();
+/** Valor para o input datetime-local (hora local do navegador). */
+function toLocalInput(date: Date = new Date()) {
+  const d = new Date(date);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
 }
@@ -32,6 +33,7 @@ export function MatchForm({
   permissions,
   currentUserId,
   isAdmin,
+  editing,
 }: {
   players: { id: string; name: string }[];
   decks: Deck[];
@@ -39,10 +41,12 @@ export function MatchForm({
   permissions: { deck_id: string; user_id: string }[];
   currentUserId: string;
   isAdmin: boolean;
+  /** Partida existente sendo corrigida pelo root (sem isso, o formulário registra uma nova). */
+  editing?: { matchId: string } & MatchInput;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [nextKey, setNextKey] = useState(5);
+  const [nextKey, setNextKey] = useState(() => (editing ? editing.participants.length + 1 : 5));
   const allowed = useMemo(() => new Set(permissions.map((p) => `${p.deck_id}:${p.user_id}`)), [permissions]);
   const isAllowed = (deckId: string, pilotId: string) => allowed.has(`${deckId}:${pilotId}`);
 
@@ -52,16 +56,30 @@ export function MatchForm({
     decks.find((d) => isAllowed(d.id, pilotId) && !used.has(d.id));
 
   const [seats, setSeats] = useState<Seat[]>(() =>
-    [1, 2, 3, 4].map((key, i) => {
+    editing
+      ? [...editing.participants]
+          .sort((a, b) => a.seat_order - b.seat_order)
+          .map((p, i) => ({
+            key: i + 1,
+            pilot_id: p.pilot_id,
+            deck_id: p.deck_id,
+            elimination_reason: p.elimination_reason ?? "",
+            eliminated_by: p.eliminated_by ?? "",
+          }))
+      : [1, 2, 3, 4].map((key, i) => {
       const pilot = i === 0 ? currentUserId : "";
       const deck = pilot ? suggestDeck(pilot, new Set())?.id ?? "" : "";
       return { key, pilot_id: pilot, deck_id: deck, elimination_reason: "", eliminated_by: "" };
     }),
   );
-  const [winnerKey, setWinnerKey] = useState<number | null>(null);
-  const [playedAt, setPlayedAt] = useState(nowLocalInput);
-  const [winCondition, setWinCondition] = useState("");
-  const [notes, setNotes] = useState("");
+  const [winnerKey, setWinnerKey] = useState<number | null>(() => {
+    if (!editing) return null;
+    const i = [...editing.participants].sort((a, b) => a.seat_order - b.seat_order).findIndex((p) => p.is_winner);
+    return i >= 0 ? i + 1 : null;
+  });
+  const [playedAt, setPlayedAt] = useState(() => toLocalInput(editing ? new Date(editing.played_at) : undefined));
+  const [winCondition, setWinCondition] = useState(editing?.win_condition ?? "");
+  const [notes, setNotes] = useState(editing?.notes ?? "");
 
   const playerName = useMemo(() => new Map(players.map((p) => [p.id, p.name])), [players]);
   const deckById = useMemo(() => new Map(decks.map((d) => [d.id, d])), [decks]);
@@ -92,20 +110,30 @@ export function MatchForm({
       toast.error(`Informe quem eliminou o jogador do assento ${missing + 1}.`);
       return;
     }
+    const input: MatchInput = {
+      played_at: new Date(playedAt).toISOString(),
+      win_condition: winCondition,
+      notes,
+      participants: seats.map((s, i) => ({
+        pilot_id: s.pilot_id,
+        deck_id: s.deck_id,
+        seat_order: i + 1,
+        is_winner: s.key === winnerKey,
+        elimination_reason: s.elimination_reason,
+        eliminated_by: s.eliminated_by,
+      })),
+    };
     startTransition(async () => {
-      const res = await createMatch({
-        played_at: new Date(playedAt).toISOString(),
-        win_condition: winCondition,
-        notes,
-        participants: seats.map((s, i) => ({
-          pilot_id: s.pilot_id,
-          deck_id: s.deck_id,
-          seat_order: i + 1,
-          is_winner: s.key === winnerKey,
-          elimination_reason: s.elimination_reason,
-          eliminated_by: s.eliminated_by,
-        })),
-      });
+      if (editing) {
+        const res = await updateMatch(editing.matchId, input);
+        if (res.error) toast.error(res.error);
+        else {
+          toast.success("Partida atualizada.");
+          router.push("/matches");
+        }
+        return;
+      }
+      const res = await createMatch(input);
       if (res.error) {
         toast.error(res.error);
         return;
@@ -317,14 +345,26 @@ export function MatchForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="notes">Notas / momentos marcantes</Label>
-        <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ex.: Thoracle na resposta do Rhystic Study…" />
+        <div className="flex items-baseline justify-between">
+          <Label htmlFor="notes">Notas / momentos marcantes</Label>
+          <span className={cn("text-xs tabular-nums text-muted-foreground", notes.length >= MATCH_NOTES_MAX && "text-amber-400")}>
+            {notes.length}/{MATCH_NOTES_MAX}
+          </span>
+        </div>
+        <Textarea
+          id="notes"
+          value={notes}
+          maxLength={MATCH_NOTES_MAX}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Ex.: Thoracle na resposta do Rhystic Study…"
+          className="max-h-32 resize-none overflow-y-auto"
+        />
       </div>
 
       <div className="sticky bottom-16 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0">
         <Button type="submit" size="lg" className="w-full" disabled={pending || winnerKey === null}>
           {pending && <Loader2 className="animate-spin" />}
-          {winnerKey === null ? "Marque o vencedor" : isAdmin ? "Registrar (já aprovada)" : "Enviar para moderação"}
+          {winnerKey === null ? "Marque o vencedor" : editing ? "Salvar alterações" : isAdmin ? "Registrar (já aprovada)" : "Enviar para moderação"}
         </Button>
       </div>
     </form>

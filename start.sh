@@ -24,8 +24,10 @@ SUDO=""
 NVM_VERSION="v0.40.3"
 NODE_MAJOR=22
 
-# Serviços do Supabase que o app não usa (sobe mais rápido e com menos memória)
-SUPABASE_EXCLUDE="realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor"
+# Serviços do Supabase que o app não usa (sobe mais rápido e com menos memória).
+# Em servidor, exclua também os de desenvolvimento:
+#   SUPABASE_EXCLUDE=realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,studio,mailpit,postgres-meta
+SUPABASE_EXCLUDE="${SUPABASE_EXCLUDE:-realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor}"
 ENV_FILE=".env.local"
 
 if [ -t 1 ]; then
@@ -342,13 +344,14 @@ pick_port() {
 banner() {
   local url="$1" studio ROOT_EMAIL_SHOWN
   ROOT_EMAIL_SHOWN="$(env_get ROOT_EMAIL)"
-  studio="$(supabase status -o env 2>/dev/null | grep -E '^STUDIO_URL=' | cut -d= -f2- | tr -d '"')"
+  # "|| true": sem Studio (SUPABASE_EXCLUDE em servidor) não há STUDIO_URL, e o set -e encerraria o script
+  studio="$(supabase status -o env 2>/dev/null | grep -E '^STUDIO_URL=' | cut -d= -f2- | tr -d '"' || true)"
   cat <<EOF
 
 ${G}${B}Tudo pronto!${N}
 
   App              ${B}$url${N}
-  Supabase Studio  ${studio:-http://127.0.0.1:54323}
+  Supabase Studio  ${studio:-desativado}
 
   Login   sua conta root${ROOT_EMAIL_SHOWN:+ ($ROOT_EMAIL_SHOWN)}; crie os membros no painel Admin.
 

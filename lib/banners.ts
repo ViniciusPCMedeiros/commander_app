@@ -16,7 +16,9 @@ export const BANNERS = {
   colecao: { file: "colecao.jpg", credit: "Reliquary Tower — Jesper Ejsing" },
   historico: { file: "historico.jpg", credit: "Great Hall of the Biblioplex — Constantin Marin" },
   admin: { file: "admin.jpg", credit: "" }, // carta e artista a confirmar
-} as const;
+  // Arte vertical: enquadra o rosto do Ragavan (~26% da altura) em vez do centro
+  novidades: { file: "novidades.jpg", credit: "Ragavan, Nimble Pilferer — Zoltan Boros", position: "50% 22%" },
+} as const satisfies Record<string, { file: string; credit: string; position?: string }>;
 
 export type BannerName = keyof typeof BANNERS;
 
@@ -24,13 +26,16 @@ export type BannerName = keyof typeof BANNERS;
  * Caminho público do banner, ou null se o arquivo ainda não estiver em public/banners
  * (nesse caso a página mostra só o gradiente dourado — nunca a arte pixelada da Scryfall).
  */
-export function resolveBanner(name: BannerName | undefined): { src: string; credit: string } | null {
+export function resolveBanner(
+  name: BannerName | undefined,
+): { src: string; credit: string; position: string } | null {
   if (!name) return null;
-  const { file, credit } = BANNERS[name];
+  const banner: { file: string; credit: string; position?: string } = BANNERS[name];
+  const { file, credit } = banner;
   const full = path.join(process.cwd(), "public", "banners", file);
   if (!fs.existsSync(full)) return null;
   // Versão pela data de modificação: trocar o arquivo mantendo o nome muda a URL,
   // e o navegador não fica preso à imagem antiga em cache.
   const version = Math.floor(fs.statSync(full).mtimeMs);
-  return { src: `/banners/${file}?v=${version}`, credit };
+  return { src: `/banners/${file}?v=${version}`, credit, position: banner.position ?? "center" };
 }

@@ -10,7 +10,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
     <>
       <Navbar profile={profile} logoutAction={logout} />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6">{children}</main>
-      <FanContentNotice />
+      <FanContentNotice changelogLink />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Flame, Trophy } from "lucide-react";
+import { Flame, Info, Trophy } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,6 +20,7 @@ import {
   type Period,
   type SortKey,
 } from "@/lib/ranking";
+import { SCORING_RULES } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { RaceBoard } from "./race-board";
@@ -44,7 +45,10 @@ const COLOR_BAR: Record<string, string> = {
 function WinRate({ value, games, sort }: { value: number; games: number; sort: SortKey }) {
   const few = sort === "winrate" && games < MIN_GAMES_FOR_WINRATE;
   return (
-    <span className={cn("tabular-nums", few && "text-muted-foreground")} title={few ? `Menos de ${MIN_GAMES_FOR_WINRATE} partidas` : undefined}>
+    <span
+      className={cn("tabular-nums", few && "text-muted-foreground")}
+      title={few ? `Menos de ${MIN_GAMES_FOR_WINRATE} partidas` : undefined}
+    >
       {formatPct(value)}
       {few && "*"}
     </span>
@@ -71,7 +75,7 @@ function Chip({ href, active, children }: { href: string; active: boolean; child
 export default async function RankingPage(props: PageProps<"/ranking">) {
   const sp = await props.searchParams;
   const period: Period = PERIODS.includes(sp.period as Period) ? (sp.period as Period) : "all";
-  const sort: SortKey = SORTS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : "wins";
+  const sort: SortKey = SORTS.includes(sp.sort as SortKey) ? (sp.sort as SortKey) : "points";
   const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "players";
 
   const { supabase } = await requireUser();
@@ -105,25 +109,25 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
           description={`${data.matches} partida(s) aprovada(s) · ${PERIOD_LABEL[period].toLowerCase()}`}
         />
         {data.lastSession && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                Setas comparam com o ranking de antes da última sessão ({formatDay(data.lastSession)},{" "}
-                {data.lastSessionMatches} partida(s)):
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <RankMovement delta={1} /> subiu
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <RankMovement delta={-1} /> caiu
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <RankMovement delta={0} /> manteve
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <RankMovement delta={null} /> estreou
-              </span>
-            </p>
-          )}
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              Setas comparam com o ranking de antes da última sessão ({formatDay(data.lastSession)},{" "}
+              {data.lastSessionMatches} partida(s)):
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <RankMovement delta={1} /> subiu
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <RankMovement delta={-1} /> caiu
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <RankMovement delta={0} /> manteve
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <RankMovement delta={null} /> estreou
+            </span>
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex flex-wrap gap-1.5">
             {PERIODS.map((p) => (
@@ -143,9 +147,34 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
         </div>
       </div>
 
+      <details className="group rounded-lg border bg-card/60 px-4 py-2 text-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-muted-foreground hover:text-foreground">
+          <Info className="size-4" /> Como funciona a pontuação
+          <span className="ml-auto text-xs group-open:hidden">ver</span>
+        </summary>
+        <div className="grid gap-x-8 gap-y-1 pt-3 pb-1 sm:grid-cols-2">
+          {SCORING_RULES.map((r) => (
+            <div key={r.label} className="flex items-center justify-between gap-3 border-b border-border/40 py-1">
+              <span>
+                {r.label} <span className="text-xs text-muted-foreground">({r.who})</span>
+              </span>
+              <span className={cn("font-semibold tabular-nums", r.points > 0 ? "text-emerald-400" : "text-rose-400")}>
+                {r.points > 0 ? `+${r.points}` : r.points}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="pt-2 pb-1 text-xs text-muted-foreground">
+          Abate é de quem foi marcado em “eliminado por”. Conceder ou “Outro” não tira pontos. Empate em pontos: mais
+          vitórias, depois mais abates.
+        </p>
+      </details>
+
       {data.matches === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">Nenhuma partida aprovada nesse período.</CardContent>
+          <CardContent className="py-10 text-center text-muted-foreground">
+            Nenhuma partida aprovada nesse período.
+          </CardContent>
         </Card>
       ) : (
         <>
@@ -172,6 +201,7 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                     </Avatar>
                     <div className="max-w-full truncate font-semibold">{p.name}</div>
                     <div className="text-xs text-muted-foreground tabular-nums">
+                      {sort === "points" && <span className="font-semibold text-foreground">{p.points} pts · </span>}
                       {p.wins}V / {p.games}J · {formatPct(p.winrate)}
                     </div>
                   </Card>
@@ -203,12 +233,15 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
             <TabsContent value="players" className="mt-4">
               <RaceBoard
                 key={`${period}-${sort}`}
+                metric={sort === "points" ? "points" : "wins"}
                 rows={players.map((p) => ({
                   id: p.id,
                   name: p.name,
                   avatar_url: p.avatar_url,
                   wins: p.wins,
                   games: p.games,
+                  points: p.points,
+                  kills: p.kills,
                   winrate: p.winrate,
                   currentStreak: p.currentStreak,
                   ownWins: p.ownWins,
@@ -232,6 +265,8 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                       <TableHead className="text-right">V</TableHead>
                       <TableHead className="text-right">J</TableHead>
                       <TableHead className="text-right">Win%</TableHead>
+                      <TableHead className="text-right">Pts</TableHead>
+                      <TableHead className="hidden text-right md:table-cell">Abates</TableHead>
                       <TableHead className="hidden text-right sm:table-cell">Pilotos</TableHead>
                       <TableHead className="hidden text-right md:table-cell">Emprestado</TableHead>
                     </TableRow>
@@ -247,7 +282,12 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                         </TableCell>
                         <TableCell>
                           <Link href={`/decks/${d.id}`} className="flex items-center gap-3 hover:underline">
-                            <CommanderArt image={d.image} partnerImage={d.partnerImage} alt={d.commander} className="h-9 w-12 shrink-0 rounded" />
+                            <CommanderArt
+                              image={d.image}
+                              partnerImage={d.partnerImage}
+                              alt={d.commander}
+                              className="h-9 w-12 shrink-0 rounded"
+                            />
                             <div className="min-w-0">
                               <div className="truncate font-medium">{d.name}</div>
                               <div className="truncate text-xs text-muted-foreground">
@@ -261,6 +301,10 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                         <TableCell className="text-right">
                           <WinRate value={d.winrate} games={d.games} sort={sort} />
                         </TableCell>
+                        <TableCell className={cn("text-right tabular-nums", sort === "points" && "font-semibold")}>
+                          {d.points}
+                        </TableCell>
+                        <TableCell className="hidden text-right tabular-nums md:table-cell">{d.kills}</TableCell>
                         <TableCell className="hidden text-right tabular-nums sm:table-cell">{d.pilots}</TableCell>
                         <TableCell className="hidden text-right text-muted-foreground tabular-nums md:table-cell">
                           {d.borrowedGames}x
@@ -282,6 +326,8 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                       <TableHead className="text-right">V</TableHead>
                       <TableHead className="text-right">J</TableHead>
                       <TableHead className="text-right">Win%</TableHead>
+                      <TableHead className="text-right">Pts</TableHead>
+                      <TableHead className="hidden text-right md:table-cell">Abates</TableHead>
                       <TableHead className="hidden text-right sm:table-cell">Decks</TableHead>
                       <TableHead className="hidden text-right sm:table-cell">Pilotos</TableHead>
                     </TableRow>
@@ -306,6 +352,10 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                         <TableCell className="text-right">
                           <WinRate value={c.winrate} games={c.games} sort={sort} />
                         </TableCell>
+                        <TableCell className={cn("text-right tabular-nums", sort === "points" && "font-semibold")}>
+                          {c.points}
+                        </TableCell>
+                        <TableCell className="hidden text-right tabular-nums md:table-cell">{c.kills}</TableCell>
                         <TableCell className="hidden text-right tabular-nums sm:table-cell">{c.decks}</TableCell>
                         <TableCell className="hidden text-right tabular-nums sm:table-cell">{c.pilots}</TableCell>
                       </TableRow>
@@ -327,9 +377,14 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                       <ColorPips colors={[c.color]} />
                       <span className="w-20 shrink-0">{c.name}</span>
                       <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div className={cn("h-full rounded-full", COLOR_BAR[c.color])} style={{ width: `${c.winrate}%` }} />
+                        <div
+                          className={cn("h-full rounded-full", COLOR_BAR[c.color])}
+                          style={{ width: `${c.winrate}%` }}
+                        />
                       </div>
-                      <span className="w-14 shrink-0 text-right font-semibold tabular-nums">{formatPct(c.winrate)}</span>
+                      <span className="w-14 shrink-0 text-right font-semibold tabular-nums">
+                        {formatPct(c.winrate)}
+                      </span>
                       <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums sm:inline">
                         {c.wins}V / {c.games}J
                       </span>
@@ -342,8 +397,8 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
 
           {sort === "winrate" && (
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Trophy className="size-3.5" /> * Menos de {MIN_GAMES_FOR_WINRATE} partidas no período: vai para o fim da lista na
-              ordenação por Win%.
+              <Trophy className="size-3.5" /> * Menos de {MIN_GAMES_FOR_WINRATE} partidas no período: vai para o fim da
+              lista na ordenação por Win%.
             </p>
           )}
         </>

@@ -1,0 +1,99 @@
+/**
+ * Notas de versão do Mesão. A primeira entrada é a versão atual (mostrada no
+ * rodapé e no menu). Ao lançar uma versão: adicione a entrada no topo e
+ * atualize "version" no package.json para o mesmo número.
+ */
+
+export type ChangeKind = "novo" | "melhoria" | "correcao";
+
+export interface Release {
+  version: string;
+  /** AAAA-MM-DD */
+  date: string;
+  title: string;
+  changes: { kind: ChangeKind; text: string }[];
+}
+
+export const CHANGELOG: Release[] = [
+  {
+    version: "1.1.0",
+    date: "2026-11-25",
+    title: "Ranking por pontos, editor de decks e coleção em galeria",
+    changes: [
+      {
+        kind: "novo",
+        text: "Ranking por pontos: vitória vale +4; abate vale +2 (dano de comandante, veneno ou mill) ou +1 (combate, combo ou drenagem); morrer por conta própria vale −1. A tabela aparece na página do ranking.",
+      },
+      { kind: "novo", text: "Perfil do jogador com pontos, abates e quem ele eliminou, por tipo de morte." },
+      {
+        kind: "novo",
+        text: "Editor de deck (botão “Editar deck”, no lugar de “Editar lista”): troque nome, comandante e parceiro; adicione cartas pela busca; ajuste quantidades, proxies e remova cartas, com contador de 100 cartas e aviso de carta fora da cor ou repetida. “Colar lista” continua lá.",
+      },
+      {
+        kind: "novo",
+        text: "Coleção em galeria, com as mesmas ações da lista (quantidade, troca, remover), e filtros por nome, tipo, cor e ordenação.",
+      },
+      {
+        kind: "novo",
+        text: "O root pode corrigir uma partida já registrada: jogadores, decks, assentos, vencedor, eliminações, data e notas.",
+      },
+      { kind: "novo", text: "Decks aposentados que nunca entraram em partida podem ser excluídos pelo dono." },
+      { kind: "novo", text: "Esta página de novidades, com a versão no rodapé e um aviso no menu quando sai versão nova." },
+      { kind: "melhoria", text: "A busca de comandante sugere só cartas que podem ser comandante." },
+      { kind: "melhoria", text: "O campo do segundo comandante (Partner) aparece também ao apertar Enter ou sair do campo." },
+      { kind: "melhoria", text: "Notas da partida limitadas a 500 caracteres, com contador e rolagem." },
+      {
+        kind: "melhoria",
+        text: "Listas de cartas (novo deck, colar lista e importar coleção) com rolagem e contador de cartas.",
+      },
+      {
+        kind: "correcao",
+        text: "Criar um deck colando a lista deixava o deck sem comandante e sem cartas. Os decks afetados foram consertados.",
+      },
+    ],
+  },
+  {
+    version: "1.0.0",
+    date: "2026-11-24",
+    title: "Lançamento do Mesão",
+    changes: [
+      {
+        kind: "novo",
+        text: "Registro de partidas com ordem dos assentos, vencedor, e como e por quem cada jogador foi eliminado; moderação pelos admins.",
+      },
+      { kind: "novo", text: "Decks com Partner, Background e Doctor's Companion, empréstimos e permissões de uso." },
+      { kind: "novo", text: "Coleção física com cartas rotacionadas entre decks e proxies (as cartas que faltam)." },
+      { kind: "novo", text: "Ranking com quem sobe e quem desce, Gazeta semanal e histórico do grupo." },
+    ],
+  },
+];
+
+export const APP_VERSION = CHANGELOG[0].version;
+
+/* Versão já vista por esta pessoa (conveniência local: o pontinho de "novidade"). */
+const SEEN_KEY = "mesao:seen-version";
+const SEEN_EVENT = "mesao:seen-version";
+
+export function readSeenVersion(): string | null {
+  try {
+    return localStorage.getItem(SEEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function subscribeSeenVersion(cb: () => void) {
+  window.addEventListener(SEEN_EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener(SEEN_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+
+export function markVersionSeen() {
+  try {
+    localStorage.setItem(SEEN_KEY, APP_VERSION);
+  } catch {}
+  window.dispatchEvent(new Event(SEEN_EVENT));
+}

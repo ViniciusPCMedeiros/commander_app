@@ -16,6 +16,8 @@ export interface RaceRow {
   wins: number;
   games: number;
   winrate: number;
+  points: number;
+  kills: number;
   currentStreak: number;
   ownWins: number;
   ownGames: number;
@@ -33,7 +35,7 @@ const ROW_H = 64;
  * Placar "de corrida": as linhas começam na ordem anterior (antes da última sessão)
  * e deslizam até a posição atual. Quem subiu brilha verde; quem caiu, vermelho.
  */
-export function RaceBoard({ rows }: { rows: RaceRow[] }) {
+export function RaceBoard({ rows, metric }: { rows: RaceRow[]; metric: "points" | "wins" }) {
   const [phase, setPhase] = useState<"before" | "after">("before");
   const [run, setRun] = useState(0);
 
@@ -44,9 +46,7 @@ export function RaceBoard({ rows }: { rows: RaceRow[] }) {
 
   // Ordem "antes": quem já estava no ranking pela posição anterior; estreantes entram por baixo
   const beforeIndex = new Map(
-    [...rows]
-      .sort((a, b) => (a.prevIndex ?? Infinity) - (b.prevIndex ?? Infinity))
-      .map((r, i) => [r.id, i]),
+    [...rows].sort((a, b) => (a.prevIndex ?? Infinity) - (b.prevIndex ?? Infinity)).map((r, i) => [r.id, i]),
   );
   const done = phase === "after";
 
@@ -72,8 +72,14 @@ export function RaceBoard({ rows }: { rows: RaceRow[] }) {
               <div
                 className={cn(
                   "flex h-[58px] items-center gap-3 rounded-xl border bg-card px-3 transition-[box-shadow,border-color,background-color] duration-700",
-                  done && moved && r.delta! > 0 && "border-emerald-500/50 bg-emerald-500/[0.06] shadow-[0_0_18px_-6px] shadow-emerald-500/60",
-                  done && moved && r.delta! < 0 && "border-red-500/40 bg-red-500/[0.05] shadow-[0_0_18px_-8px] shadow-red-500/50",
+                  done &&
+                    moved &&
+                    r.delta! > 0 &&
+                    "border-emerald-500/50 bg-emerald-500/[0.06] shadow-[0_0_18px_-6px] shadow-emerald-500/60",
+                  done &&
+                    moved &&
+                    r.delta! < 0 &&
+                    "border-red-500/40 bg-red-500/[0.05] shadow-[0_0_18px_-8px] shadow-red-500/50",
                   done && isNew && "border-amber-400/50 bg-amber-400/[0.05]",
                   i === 0 && done && "border-amber-400/60",
                 )}
@@ -101,11 +107,14 @@ export function RaceBoard({ rows }: { rows: RaceRow[] }) {
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-lg leading-none font-black tabular-nums">
-                    {r.wins}
-                    <span className="text-xs font-normal text-muted-foreground">V</span>
+                    {metric === "points" ? r.points : r.wins}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {metric === "points" ? " pts" : "V"}
+                    </span>
                   </div>
                   <div className={cn("text-xs text-muted-foreground tabular-nums", r.fewGames && "opacity-60")}>
-                    {r.games}J · {formatPct(r.winrate)}
+                    {metric === "points" && `${r.wins}V · `}
+                    <span title="Abates">⚔ {r.kills}</span> · {r.games}J · {formatPct(r.winrate)}
                     {r.fewGames && "*"}
                   </div>
                 </div>

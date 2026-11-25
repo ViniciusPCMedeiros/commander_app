@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MatchCard } from "@/components/match-card";
 import { requireUser } from "@/lib/auth";
 import { MATCH_SELECT } from "@/lib/newspaper";
-import { isModerator } from "@/lib/roles";
+import { isModerator, isRoot } from "@/lib/roles";
 import type { MatchWithParticipants } from "@/lib/types";
 import { ModerationActions } from "./moderation-actions";
 import { PageHeader } from "@/components/page-header";
@@ -80,7 +80,7 @@ export default async function MatchesPage(props: PageProps<"/matches">) {
             <MatchCard
               key={m.id}
               match={m}
-              actions={isAdmin ? <ModerationActions matchId={m.id} status={m.status} /> : undefined}
+              actions={isAdmin ? <ModerationActions matchId={m.id} status={m.status} canEdit={isRoot(profile.role)} /> : undefined}
             />
           ))}
         </TabsContent>
@@ -91,7 +91,7 @@ export default async function MatchesPage(props: PageProps<"/matches">) {
             <MatchCard
               key={m.id}
               match={m}
-              actions={isAdmin ? <ModerationActions matchId={m.id} status={m.status} /> : undefined}
+              actions={isAdmin ? <ModerationActions matchId={m.id} status={m.status} canEdit={isRoot(profile.role)} /> : undefined}
             />
           ))}
         </TabsContent>

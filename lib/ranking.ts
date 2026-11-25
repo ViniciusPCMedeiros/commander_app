@@ -1,9 +1,10 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { commanderLabel, HIDDEN_PLAYER } from "@/lib/format";
+import { scoreMatch } from "@/lib/scoring";
 
 export type Period = "all" | "month" | "30d" | "year";
-export type SortKey = "wins" | "winrate" | "games";
+export type SortKey = "points" | "wins" | "winrate" | "games";
 
 export const PERIOD_LABEL: Record<Period, string> = {
   all: "Desde sempre",
@@ -12,12 +13,24 @@ export const PERIOD_LABEL: Record<Period, string> = {
   year: "Este ano",
 };
 
-export const SORT_LABEL: Record<SortKey, string> = { wins: "Vitórias", winrate: "Win%", games: "Partidas" };
+export const SORT_LABEL: Record<SortKey, string> = {
+  points: "Pontos",
+  wins: "Vitórias",
+  winrate: "Win%",
+  games: "Partidas",
+};
 
 /** Mínimo de partidas para entrar na ordenação por Win% (evita 1/1 = 100%). */
 export const MIN_GAMES_FOR_WINRATE = 3;
 
-const COLOR_NAME: Record<string, string> = { W: "Branco", U: "Azul", B: "Preto", R: "Vermelho", G: "Verde", C: "Incolor" };
+const COLOR_NAME: Record<string, string> = {
+  W: "Branco",
+  U: "Azul",
+  B: "Preto",
+  R: "Vermelho",
+  G: "Verde",
+  C: "Incolor",
+};
 
 interface Participation {
   match_id: string;
@@ -27,13 +40,25 @@ interface Participation {
   commander_snapshot: string;
   color_identity_snapshot: string[] | null;
   is_winner: boolean;
+  elimination_reason: string | null;
+  eliminated_by: string | null;
   played_at: string;
+}
+
+/** Participação com os pontos e abates daquela partida (ver lib/scoring.ts). */
+interface ScoredParticipation extends Participation {
+  points: number;
+  kills: number;
+  killsByReason: Record<string, number>;
+  selfDeath: boolean;
 }
 
 interface Base {
   games: number;
   wins: number;
   winrate: number;
+  points: number;
+  kills: number;
 }
 
 export interface PlayerRow extends Base {
@@ -47,6 +72,7 @@ export interface PlayerRow extends Base {
   currentStreak: number;
   bestStreak: number;
   lastPlayed: string;
+  selfDeaths: number;
 }
 
 export interface DeckRow extends Base {
@@ -95,31 +121,46 @@ export function sortRows<T extends Base & { name?: string }>(rows: T[], sort: So
       return qb - qa || b.winrate - a.winrate || b.wins - a.wins || b.games - a.games || byName(a, b);
     }
     if (sort === "games") return b.games - a.games || b.wins - a.wins || byName(a, b);
+    if (sort === "points")
+      return b.points - a.points || b.wins - a.wins || b.kills - a.kills || b.games - a.games || byName(a, b);
     return b.wins - a.wins || b.winrate - a.winrate || b.games - a.games || byName(a, b);
   });
 }
 
 /** Dia (no fuso de São Paulo) em que a partida aconteceu: "2026-11-22". */
 const sessionDay = (iso: string) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(
-    new Date(iso),
-  );
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
 
 export async function loadRanking(supabase: SupabaseClient, period: Period) {
   const start = periodStart(period);
   let query = supabase
     .from("approved_participations")
-    .select("match_id, pilot_id, deck_id, deck_owner_id, commander_snapshot, color_identity_snapshot, is_winner, played_at")
+    .select(
+      "match_id, pilot_id, deck_id, deck_owner_id, commander_snapshot, color_identity_snapshot, is_winner, elimination_reason, eliminated_by, played_at",
+    )
     .order("played_at", { ascending: true });
   if (start) query = query.gte("played_at", start.toISOString());
 
   const [{ data: parts }, { data: users }, { data: decks }] = await Promise.all([
     query.returns<Participation[]>(),
     supabase.from("users").select("id, name, avatar_url"),
-    supabase.from("decks").select("id, name, commander_name, partner_name, commander_image_url, partner_image_url, color_identity, owner_id"),
+    supabase
+      .from("decks")
+      .select(
+        "id, name, commander_name, partner_name, commander_image_url, partner_image_url, color_identity, owner_id",
+      ),
   ]);
 
-  const rows = parts ?? [];
+  // Pontos por partida: os abates dependem de quem mais estava na mesa
+  const byMatch = new Map<string, Participation[]>();
+  for (const p of parts ?? []) byMatch.set(p.match_id, [...(byMatch.get(p.match_id) ?? []), p]);
+  const scores = new Map([...byMatch.entries()].map(([id, ps]) => [id, scoreMatch(ps)]));
+  const rows: ScoredParticipation[] = (parts ?? []).map((p) => ({ ...p, ...scores.get(p.match_id)!.get(p.pilot_id)! }));
   const lookups = {
     userById: new Map((users ?? []).map((u) => [u.id as string, u])),
     deckById: new Map((decks ?? []).map((d) => [d.id as string, d])),
@@ -132,7 +173,8 @@ export async function loadRanking(supabase: SupabaseClient, period: Period) {
   return {
     ...aggregate(rows, lookups),
     lastSession,
-    lastSessionMatches: new Set(rows.filter((p) => sessionDay(p.played_at) === lastSession).map((p) => p.match_id)).size,
+    lastSessionMatches: new Set(rows.filter((p) => sessionDay(p.played_at) === lastSession).map((p) => p.match_id))
+      .size,
     previous: aggregate(before, lookups),
   };
 }
@@ -153,7 +195,7 @@ type Lookups = {
   >;
 };
 
-function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
+function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups) {
   // Jogadores (participações já vêm em ordem cronológica → sequências)
   const players = new Map<string, PlayerRow>();
   for (const p of rows) {
@@ -168,6 +210,9 @@ function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
         games: 0,
         wins: 0,
         winrate: 0,
+        points: 0,
+        kills: 0,
+        selfDeaths: 0,
         ownGames: 0,
         ownWins: 0,
         borrowedGames: 0,
@@ -178,6 +223,9 @@ function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
       } satisfies PlayerRow);
     const own = p.pilot_id === p.deck_owner_id;
     r.games++;
+    r.points += p.points;
+    r.kills += p.kills;
+    if (p.selfDeath) r.selfDeaths++;
     if (own) r.ownGames++;
     else r.borrowedGames++;
     if (p.is_winner) {
@@ -198,25 +246,27 @@ function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
   for (const p of rows) {
     const d = deckById.get(p.deck_id);
     if (!d) continue; // deck de jogador invisível
-    const r =
-      deckRows.get(p.deck_id) ??
-      {
-        id: p.deck_id,
-        name: d?.name ?? "?",
-        commander: commanderLabel(d?.commander_name ?? p.commander_snapshot, d?.partner_name),
-        image: d?.commander_image_url ?? null,
-        partnerImage: d?.partner_image_url ?? null,
-        colors: d?.color_identity ?? p.color_identity_snapshot ?? [],
-        ownerId: p.deck_owner_id,
-        ownerName: userById.get(p.deck_owner_id)?.name ?? HIDDEN_PLAYER,
-        games: 0,
-        wins: 0,
-        winrate: 0,
-        pilots: 0,
-        borrowedGames: 0,
-        pilotSet: new Set<string>(),
-      };
+    const r = deckRows.get(p.deck_id) ?? {
+      id: p.deck_id,
+      name: d?.name ?? "?",
+      commander: commanderLabel(d?.commander_name ?? p.commander_snapshot, d?.partner_name),
+      image: d?.commander_image_url ?? null,
+      partnerImage: d?.partner_image_url ?? null,
+      colors: d?.color_identity ?? p.color_identity_snapshot ?? [],
+      ownerId: p.deck_owner_id,
+      ownerName: userById.get(p.deck_owner_id)?.name ?? HIDDEN_PLAYER,
+      games: 0,
+      wins: 0,
+      winrate: 0,
+      points: 0,
+      kills: 0,
+      pilots: 0,
+      borrowedGames: 0,
+      pilotSet: new Set<string>(),
+    };
     r.games++;
+    r.points += p.points;
+    r.kills += p.kills;
     if (p.is_winner) r.wins++;
     if (p.pilot_id !== p.deck_owner_id) r.borrowedGames++;
     r.pilotSet.add(p.pilot_id);
@@ -227,10 +277,22 @@ function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
   const commanders = new Map<string, CommanderRow & { deckSet: Set<string>; pilotSet: Set<string> }>();
   for (const p of rows) {
     const name = commanderLabel(p.commander_snapshot);
-    const r =
-      commanders.get(name) ??
-      { name, colors: p.color_identity_snapshot ?? [], games: 0, wins: 0, winrate: 0, decks: 0, pilots: 0, deckSet: new Set<string>(), pilotSet: new Set<string>() };
+    const r = commanders.get(name) ?? {
+      name,
+      colors: p.color_identity_snapshot ?? [],
+      games: 0,
+      wins: 0,
+      winrate: 0,
+      points: 0,
+      kills: 0,
+      decks: 0,
+      pilots: 0,
+      deckSet: new Set<string>(),
+      pilotSet: new Set<string>(),
+    };
     r.games++;
+    r.points += p.points;
+    r.kills += p.kills;
     if (p.is_winner) r.wins++;
     r.deckSet.add(p.deck_id);
     r.pilotSet.add(p.pilot_id);
@@ -242,7 +304,15 @@ function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
   for (const p of rows) {
     const ids = p.color_identity_snapshot?.length ? p.color_identity_snapshot : ["C"];
     for (const c of ids) {
-      const r = colors.get(c) ?? { color: c, name: COLOR_NAME[c] ?? c, games: 0, wins: 0, winrate: 0 };
+      const r = colors.get(c) ?? {
+        color: c,
+        name: COLOR_NAME[c] ?? c,
+        games: 0,
+        wins: 0,
+        winrate: 0,
+        points: 0,
+        kills: 0,
+      };
       r.games++;
       if (p.is_winner) r.wins++;
       colors.set(c, r);
@@ -255,7 +325,9 @@ function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
     matches: new Set(rows.map((p) => p.match_id)).size,
     players: [...players.values()].map(finish),
     decks: [...deckRows.values()].map(({ pilotSet, ...r }) => finish({ ...r, pilots: pilotSet.size })),
-    commanders: [...commanders.values()].map(({ deckSet, pilotSet, ...r }) => finish({ ...r, decks: deckSet.size, pilots: pilotSet.size })),
+    commanders: [...commanders.values()].map(({ deckSet, pilotSet, ...r }) =>
+      finish({ ...r, decks: deckSet.size, pilots: pilotSet.size }),
+    ),
     colors: [...colors.values()].map(finish),
   };
 }
@@ -264,7 +336,11 @@ function aggregate(rows: Participation[], { userById, deckById }: Lookups) {
 export type Movement = number | null;
 
 /** Compara as posições atuais com as anteriores (mesma ordenação) usando a chave de cada linha. */
-export function movements<T>(current: T[], previous: T[], key: (row: T) => string): Map<string, { delta: Movement; prevIndex: number | null }> {
+export function movements<T>(
+  current: T[],
+  previous: T[],
+  key: (row: T) => string,
+): Map<string, { delta: Movement; prevIndex: number | null }> {
   const prevIndex = new Map(previous.map((r, i) => [key(r), i]));
   return new Map(
     current.map((r, i) => {

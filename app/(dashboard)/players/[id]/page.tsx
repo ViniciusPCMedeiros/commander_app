@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Swords } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import { MilestoneItem, MilestoneList } from "@/components/milestone-item";
 import { milestoneEvents } from "@/lib/milestones";
 import { loadProxyCards } from "@/lib/proxies";
 import { ROLE_LABEL } from "@/lib/roles";
+import { killPoints, selfPenalty, WIN_POINTS } from "@/lib/scoring";
 import type {
   AIInsight,
   DeckPermissionWithRelations,
@@ -37,10 +39,22 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
   const { data: player } = await supabase.from("users").select("*").eq("id", id).maybeSingle<UserProfile>();
   if (!player) notFound();
 
-  const [{ data: stats }, { data: decks }, { data: participations }, { data: insight }, { data: permissions }, proxies, { data: milestones }] = await Promise.all([
+  const [
+    { data: stats },
+    { data: decks },
+    { data: participations },
+    { data: insight },
+    { data: permissions },
+    proxies,
+    { data: milestones },
+    { data: killed },
+  ] = await Promise.all([
     supabase.from("player_stats").select("*").eq("user_id", id).single<PlayerStats>(),
     supabase.from("deck_stats").select("*").eq("owner_id", id).order("total_wins", { ascending: false }).returns<DeckStats[]>(),
-    supabase.from("approved_participations").select("match_id, commander_snapshot, color_identity_snapshot, is_winner").eq("pilot_id", id),
+    supabase
+      .from("approved_participations")
+      .select("match_id, commander_snapshot, color_identity_snapshot, is_winner, elimination_reason")
+      .eq("pilot_id", id),
     supabase
       .from("ai_insights")
       .select("*")
@@ -52,6 +66,8 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
     supabase.from("deck_permissions").select(PERMISSION_SELECT).order("created_at").returns<DeckPermissionWithRelations[]>(),
     loadProxyCards(supabase, id),
     supabase.from("player_milestones").select("*").eq("user_id", id).maybeSingle<PlayerMilestones>(),
+    // Quem este jogador eliminou (abates)
+    supabase.from("approved_participations").select("elimination_reason").eq("eliminated_by", id).eq("is_winner", false),
   ]);
   // Linha do tempo em ordem cronológica (entrou → primeira partida → primeira vitória)
   const timeline = milestones ? milestoneEvents([milestones]).reverse() : [];
@@ -85,6 +101,17 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
   const commanders = [...byCommander.entries()].sort((a, b) => b[1].games - a[1].games);
   const s = stats!;
 
+  // Pontuação do ranking (mesma regra de lib/scoring.ts), desde sempre
+  const kills = (killed ?? []).filter((k) => killPoints(k.elimination_reason) > 0);
+  const killsByReason = [...Map.groupBy(kills, (k) => k.elimination_reason as string)]
+    .map(([reason, list]) => ({ reason, count: list.length, points: killPoints(reason) * list.length }))
+    .sort((a, b) => b.count - a.count || b.points - a.points);
+  const selfDeaths = (participations ?? []).filter((p) => selfPenalty(p.elimination_reason) < 0);
+  const points =
+    s.total_wins * WIN_POINTS +
+    killsByReason.reduce((sum, k) => sum + k.points, 0) +
+    selfDeaths.reduce((sum, p) => sum + selfPenalty(p.elimination_reason), 0);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -102,8 +129,10 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
         description={`Membro desde ${formatDate(player.created_at)} (${formatDaysAgo(player.created_at)})`}
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {[
+          { label: "Pontos", value: points },
+          { label: "Abates", value: kills.length },
           { label: "Partidas", value: s.total_games },
           { label: "Vitórias", value: `${s.total_wins} · ${formatPct(s.overall_winrate)}` },
           { label: "Com decks próprios", value: `${s.own_deck_wins}/${s.own_deck_games}` },
@@ -154,6 +183,40 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
                 </span>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Swords className="size-5" /> Abates
+            </CardTitle>
+            <CardDescription>
+              Quem {player.name} eliminou, por tipo. Abates mais difíceis valem mais pontos no{" "}
+              <Link href="/ranking" className="underline">
+                ranking
+              </Link>
+              .
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {killsByReason.length === 0 && <p className="text-sm text-muted-foreground">Nenhum abate registrado ainda.</p>}
+            {killsByReason.map((k) => (
+              <div key={k.reason} className="flex items-center gap-3 text-sm">
+                <span className="flex-1 truncate">{k.reason}</span>
+                <span className="tabular-nums">{k.count}×</span>
+                <span className="w-14 text-right font-semibold text-emerald-400 tabular-nums">+{k.points}</span>
+              </div>
+            ))}
+            {selfDeaths.length > 0 && (
+              <div className="flex items-center gap-3 border-t pt-2 text-sm text-muted-foreground">
+                <span className="flex-1">Morreu por conta própria</span>
+                <span className="tabular-nums">{selfDeaths.length}×</span>
+                <span className="w-14 text-right font-semibold text-rose-400 tabular-nums">
+                  {selfDeaths.reduce((sum, p) => sum + selfPenalty(p.elimination_reason), 0)}
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

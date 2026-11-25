@@ -22,6 +22,7 @@ export interface ScryfallCard {
   name: string;
   layout: string;
   mana_cost?: string;
+  cmc?: number;
   type_line?: string;
   oracle_text?: string;
   color_identity: string[];
@@ -181,6 +182,41 @@ export async function autocompleteCards(query: string, signal?: AbortSignal): Pr
   if (!res.ok) return [];
   const json = (await res.json()) as { data?: string[] };
   return json.data ?? [];
+}
+
+/** Pode ser comandante: lendária (criatura, Background…) ou com "can be your commander". */
+export function canBeCommander(card: ScryfallCard): boolean {
+  const faces = [card, ...(card.card_faces ?? [])];
+  return (
+    faces.some((f) => /legendary/i.test(f.type_line ?? "")) ||
+    faces.some((f) => /can be your commander/i.test(f.oracle_text ?? ""))
+  );
+}
+
+/**
+ * Autocomplete só de cartas que podem ser comandante (`is:commander`: criaturas
+ * lendárias, "can be your commander", Backgrounds…). Nomes que começam com o
+ * texto digitado vêm primeiro; depois, os que têm uma palavra começando com ele.
+ */
+export async function autocompleteCommanders(query: string, signal?: AbortSignal): Promise<string[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const params = new URLSearchParams({ q: `is:commander ${q}`, order: "edhrec", unique: "cards" });
+  const res = await fetch(`${SCRYFALL}/cards/search?${params}`, { headers: serverHeaders, signal });
+  if (!res.ok) return []; // 404 = nenhum comandante com esse nome
+  const json = (await res.json()) as { data?: { name: string }[] };
+  const lower = q.toLowerCase();
+  const rank = (name: string) => {
+    const n = name.toLowerCase();
+    if (n.startsWith(lower)) return 0;
+    if (n.split(/[\s,'-]+/).some((w) => w.startsWith(lower)) || n.includes(` ${lower}`)) return 1;
+    return n.includes(lower) ? 2 : 3;
+  };
+  return (json.data ?? [])
+    .map((c, i) => ({ name: c.name, r: rank(c.name), i }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .slice(0, 20)
+    .map((c) => c.name);
 }
 
 /** Detalhe de carta por nome: exato primeiro, fuzzy como fallback. */

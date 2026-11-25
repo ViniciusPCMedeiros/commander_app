@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+import { CardListTextarea } from "@/components/card-list-textarea";
 import { importCollection } from "@/lib/actions/collection";
 
 export function ImportDialog() {
@@ -36,11 +36,12 @@ export function ImportDialog() {
             vêm da Scryfall (busca em lote, até 75 por requisição).
           </DialogDescription>
         </DialogHeader>
-        <Textarea
+        <CardListTextarea
           rows={12}
-          className="font-mono text-xs"
+          max={40_000}
+          aria-label="Lista de cartas"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={setText}
           placeholder={"1 Sol Ring\n2 Cultivate\n1 Esika, God of the Tree\n1 Rhystic Study"}
         />
         <DialogFooter>

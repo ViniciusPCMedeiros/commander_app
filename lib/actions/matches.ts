@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { eliminationKind } from "@/lib/elimination";
-import { isModerator } from "@/lib/roles";
+import { MATCH_NOTES_MAX } from "@/lib/format";
+import { isModerator, isRoot } from "@/lib/roles";
 import type { Deck } from "@/lib/types";
 
 export interface MatchInput {
@@ -28,15 +29,15 @@ function revalidateAll() {
   revalidatePath("/players/[id]", "page");
 }
 
-export async function createMatch(input: MatchInput): Promise<{ error?: string; status?: string }> {
-  const { supabase, profile } = await requireUser();
+/** Regras comuns a criar e editar partida. Retorna a mensagem de erro, se houver. */
+function validateMatch(input: MatchInput): string | null {
+  if ((input.notes?.trim().length ?? 0) > MATCH_NOTES_MAX) return `As notas podem ter no máximo ${MATCH_NOTES_MAX} caracteres.`;
   const ps = input.participants;
-
-  if (ps.length < 2 || ps.length > 8) return { error: "Uma partida precisa de 2 a 8 jogadores." };
-  if (ps.some((p) => !p.pilot_id || !p.deck_id)) return { error: "Preencha jogador e deck em todos os assentos." };
-  if (new Set(ps.map((p) => p.pilot_id)).size !== ps.length) return { error: "Um jogador aparece duas vezes." };
-  if (new Set(ps.map((p) => p.deck_id)).size !== ps.length) return { error: "Um deck aparece duas vezes." };
-  if (ps.filter((p) => p.is_winner).length !== 1) return { error: "Marque exatamente um vencedor." };
+  if (ps.length < 2 || ps.length > 8) return "Uma partida precisa de 2 a 8 jogadores.";
+  if (ps.some((p) => !p.pilot_id || !p.deck_id)) return "Preencha jogador e deck em todos os assentos.";
+  if (new Set(ps.map((p) => p.pilot_id)).size !== ps.length) return "Um jogador aparece duas vezes.";
+  if (new Set(ps.map((p) => p.deck_id)).size !== ps.length) return "Um deck aparece duas vezes.";
+  if (ps.filter((p) => p.is_winner).length !== 1) return "Marque exatamente um vencedor.";
 
   // Quem eliminou: obrigatório quando o motivo é causado por um oponente
   const pilotIds = new Set(ps.map((p) => p.pilot_id));
@@ -44,11 +45,19 @@ export async function createMatch(input: MatchInput): Promise<{ error?: string; 
     if (p.is_winner) continue;
     const kind = eliminationKind(p.elimination_reason);
     if (kind === "opponent") {
-      if (!p.eliminated_by) return { error: `Informe quem eliminou o jogador do assento ${p.seat_order} (${p.elimination_reason}).` };
-      if (p.eliminated_by === p.pilot_id) return { error: `O jogador do assento ${p.seat_order} não pode ter sido eliminado por ele mesmo — use "Drenagem própria" ou "Mill próprio".` };
-      if (!pilotIds.has(p.eliminated_by)) return { error: `Quem eliminou o jogador do assento ${p.seat_order} precisa estar na partida.` };
+      if (!p.eliminated_by) return `Informe quem eliminou o jogador do assento ${p.seat_order} (${p.elimination_reason}).`;
+      if (p.eliminated_by === p.pilot_id) return `O jogador do assento ${p.seat_order} não pode ter sido eliminado por ele mesmo — use "Drenagem própria" ou "Mill próprio".`;
+      if (!pilotIds.has(p.eliminated_by)) return `Quem eliminou o jogador do assento ${p.seat_order} precisa estar na partida.`;
     }
   }
+  return null;
+}
+
+export async function createMatch(input: MatchInput): Promise<{ error?: string; status?: string }> {
+  const { supabase, profile } = await requireUser();
+  const ps = input.participants;
+  const invalid = validateMatch(input);
+  if (invalid) return { error: invalid };
 
   const playedAt = input.played_at ? new Date(input.played_at) : new Date();
   if (Number.isNaN(playedAt.getTime())) return { error: "Data inválida." };
@@ -128,5 +137,41 @@ export async function deleteMatch(matchId: string) {
   const { error } = await supabase.from("matches").delete().eq("id", matchId);
   if (error) return { error: error.message };
   revalidateAll();
+  return {};
+}
+
+/**
+ * Correção de uma partida já registrada (só root). Mantém o status; a troca dos
+ * participantes acontece numa única transação no banco (root_update_match).
+ */
+export async function updateMatch(matchId: string, input: MatchInput): Promise<{ error?: string }> {
+  const { supabase, profile } = await requireUser();
+  if (!isRoot(profile.role)) return { error: "Apenas o root edita partidas." };
+
+  const invalid = validateMatch(input);
+  if (invalid) return { error: invalid };
+  const playedAt = new Date(input.played_at);
+  if (Number.isNaN(playedAt.getTime())) return { error: "Data inválida." };
+
+  const { error } = await supabase.rpc("root_update_match", {
+    p_match_id: matchId,
+    p_played_at: playedAt.toISOString(),
+    p_win_condition: input.win_condition ?? "",
+    p_notes: input.notes ?? "",
+    p_participants: input.participants.map((p) => ({
+      pilot_id: p.pilot_id,
+      deck_id: p.deck_id,
+      seat_order: p.seat_order,
+      is_winner: p.is_winner,
+      elimination_reason: p.is_winner ? null : p.elimination_reason || null,
+      eliminated_by:
+        !p.is_winner && eliminationKind(p.elimination_reason) === "opponent" ? p.eliminated_by || null : null,
+    })),
+  });
+  if (error) return { error: `Erro ao salvar a partida: ${error.message}` };
+
+  revalidateAll();
+  revalidatePath("/ranking");
+  revalidatePath("/history");
   return {};
 }
