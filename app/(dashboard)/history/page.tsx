@@ -13,7 +13,7 @@ export default async function HistoryPage() {
   const { supabase } = await requireUser();
   const { data } = await supabase.from("player_milestones").select("*").returns<PlayerMilestones[]>();
   const rows = data ?? [];
-  const events = milestoneEvents(rows);
+  const events = milestoneEvents(rows, { releases: true });
 
   // Agrupa por mês (eventos já vêm do mais recente ao mais antigo)
   const months: { label: string; events: MilestoneEvent[] }[] = [];
@@ -24,7 +24,9 @@ export default async function HistoryPage() {
     else months.push({ label, events: [e] });
   }
 
-  const founded = rows.reduce<string | null>((min, r) => (!min || r.joined_at < min ? r.joined_at : min), null);
+  const founded = events
+    .filter((e) => e.kind === "joined")
+    .reduce<string | null>((min, e) => (!min || e.at < min ? e.at : min), null);
   const withMatch = rows.filter((r) => r.first_match_id).length;
   const withWin = rows.filter((r) => r.first_win_id).length;
 
@@ -34,7 +36,7 @@ export default async function HistoryPage() {
         banner="historico"
         eyebrow="Crônicas"
         title="Histórico do grupo"
-        description="Quando cada membro entrou, a primeira partida e a primeira vitória (partidas aprovadas)."
+        description="Quando cada membro entrou, a primeira partida, a primeira vitória (partidas aprovadas) e as versões do Mesão."
       />
 
       <div className="grid grid-cols-3 gap-3">
@@ -68,7 +70,7 @@ export default async function HistoryPage() {
             <CardContent>
               <MilestoneList>
                 {m.events.map((e) => (
-                  <MilestoneItem key={`${e.kind}-${e.userId}`} event={e} />
+                  <MilestoneItem key={`${e.kind}-${e.userId}-${e.release?.version ?? ""}`} event={e} />
                 ))}
               </MilestoneList>
             </CardContent>

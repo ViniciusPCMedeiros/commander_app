@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Repeat, Swords, Trophy, UserPlus } from "lucide-react";
+import { Repeat, Sparkles, Swords, Trophy, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { commanderLabel, formatDate } from "@/lib/format";
 import type { MilestoneEvent, MilestoneKind } from "@/lib/milestones";
@@ -9,6 +9,7 @@ const STYLE: Record<MilestoneKind, { icon: typeof UserPlus; className: string }>
   joined: { icon: UserPlus, className: "bg-sky-500/15 text-sky-300 ring-sky-500/30" },
   first_match: { icon: Swords, className: "bg-zinc-500/15 text-zinc-200 ring-zinc-500/30" },
   first_win: { icon: Trophy, className: "bg-amber-500/15 text-amber-300 ring-amber-500/30" },
+  release: { icon: Sparkles, className: "bg-primary/15 text-primary ring-primary/40" },
 };
 
 /** Um marco na linha do tempo. `showName=false` no perfil, onde o jogador já é conhecido. */
@@ -40,6 +41,14 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
       </span>
       <div className="min-w-0 flex-1 pt-1 text-sm">
         <p>
+          {event.release && (
+            <>
+              <Link href={`/changelog#v${event.release.version}`} className="font-semibold text-primary hover:underline">
+                Mesão v{event.release.version}
+              </Link>{" "}
+              — {event.release.title}
+            </>
+          )}
           {event.kind === "joined" && <>{who ?? "Entrou"}{who && " entrou"} no grupo</>}
           {event.kind === "first_match" && (
             <>
@@ -57,6 +66,11 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
         </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {formatDate(event.at)}
+          {event.release && (
+            <Link href={`/changelog#v${event.release.version}`} className="hover:text-foreground">
+              {event.release.changes} novidade{event.release.changes === 1 ? "" : "s"} →
+            </Link>
+          )}
           {event.borrowed && (
             <Badge variant="outline" className="gap-1 text-[10px]">
               <Repeat className="size-3" /> deck emprestado

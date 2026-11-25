@@ -31,7 +31,7 @@ export default function ChangelogPage() {
           <CardHeader className="gap-1">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="font-display text-lg font-semibold text-primary">v{release.version}</span>
-              <span>· {formatDate(`${release.date}T12:00:00`)}</span>
+              <span>· {formatDate(release.date)}</span>
               {i === 0 && <Badge className="h-5">atual</Badge>}
             </div>
             <CardTitle>{release.title}</CardTitle>

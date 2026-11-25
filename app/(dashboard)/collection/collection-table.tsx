@@ -52,6 +52,7 @@ const COLORS = [
   { value: "B", label: "Preto" },
   { value: "R", label: "Vermelho" },
   { value: "G", label: "Verde" },
+  { value: "C", label: "Incolor" },
 ] as const;
 const WUBRG = "WUBRG";
 
@@ -283,13 +284,18 @@ export function CollectionTable({
         ? proxies.filter((p) => filter !== "needed" || p.needed_qty > 0).map((proxy) => ({ kind: "proxy", proxy }))
         : [];
 
-    // Busca por nome, tipo ou deck; tipo; e cores (cartas que cabem na identidade escolhida)
+    // Cores: o que cabe na identidade escolhida (incolor cabe em todas); só "incolor" = só as incolores
+    const wubrg = colors.filter((c) => c !== "C");
+    const matchesColors = (ci: string[]) =>
+      !colors.length || (wubrg.length ? ci.every((c) => wubrg.includes(c)) : ci.length === 0);
+
+    // Busca por nome, tipo ou deck; tipo; e cores
     const q = query.trim().toLowerCase();
     const filtered = [...cardRows, ...proxyRows].filter(
       (r) =>
         (!q || [nameOf(r), typeOf(r), ...decksOf(r)].some((t) => t.toLowerCase().includes(q))) &&
         (!type || typeOf(r).includes(type)) &&
-        (!colors.length || colorsOf(r).every((c) => colors.includes(c))),
+        matchesColors(colorsOf(r)),
     );
 
     const colorKey = (r: Row) => {
@@ -372,7 +378,7 @@ export function CollectionTable({
           <div
             role="group"
             aria-label="Cores (mostra o que cabe nessa identidade)"
-            title="Mostra as cartas que cabem num deck dessas cores"
+            title="Mostra as cartas que cabem num deck dessas cores (incolor sozinho: só as incolores)"
             className="flex h-10 items-center gap-1 rounded-md border border-input px-2 dark:bg-input/30"
           >
             {COLORS.map((c) => {
@@ -427,7 +433,7 @@ export function CollectionTable({
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {rows.length} {rows.length === 1 ? "carta" : "cartas"}
-            {colors.length > 0 && " que cabem nessas cores"}
+            {colors.length > 0 && (colors.every((c) => c === "C") ? " incolores" : " que cabem nessas cores")}
           </span>
           {hasFilters && (
             <button

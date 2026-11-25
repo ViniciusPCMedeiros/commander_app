@@ -8,7 +8,7 @@ export type ChangeKind = "novo" | "melhoria" | "correcao";
 
 export interface Release {
   version: string;
-  /** AAAA-MM-DD */
+  /** Quando a versão foi ao ar (ISO com fuso): ordena o histórico do grupo. */
   date: string;
   title: string;
   changes: { kind: ChangeKind; text: string }[];
@@ -16,8 +16,25 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.1",
+    date: "2026-11-25T11:00:00-03:00",
+    title: "Versões no histórico e correções",
+    changes: [
+      { kind: "melhoria", text: "O histórico do grupo mostra cada versão do Mesão, com link para as novidades." },
+      { kind: "melhoria", text: "Filtro de incolor na coleção: sozinho, mostra só as cartas incolores." },
+      {
+        kind: "correcao",
+        text: "No histórico, quem jogou antes de criar a conta aparecia entrando no grupo depois da própria primeira partida.",
+      },
+      {
+        kind: "correcao",
+        text: "Ao corrigir uma partida trocando o deck de alguém, o deck novo ficava sem cores (incolor). As partidas afetadas foram consertadas.",
+      },
+    ],
+  },
+  {
     version: "1.1.0",
-    date: "2026-11-25",
+    date: "2026-11-25T09:53:00-03:00",
     title: "Ranking por pontos, editor de decks e coleção em galeria",
     changes: [
       {
@@ -54,7 +71,7 @@ export const CHANGELOG: Release[] = [
   },
   {
     version: "1.0.0",
-    date: "2026-11-24",
+    date: "2026-11-24T15:30:00-03:00",
     title: "Lançamento do Mesão",
     changes: [
       {
