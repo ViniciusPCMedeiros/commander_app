@@ -11,7 +11,7 @@ export const ELIMINATION_REASONS: { value: string; kind: EliminationKind; points
   { value: "Dano de Comandante", kind: "opponent", points: 2 },
   { value: "Combo", kind: "opponent", points: 1 },
   { value: "Veneno", kind: "opponent", points: 2 },
-  { value: "Mill (grimório vazio) do inimigo", kind: "opponent", points: 2 },
+  { value: "Mill (grimório vazio) do inimigo", kind: "opponent", points: 1 },
   { value: "Drenagem do inimigo", kind: "opponent", points: 1 },
   { value: "Drenagem própria", kind: "self", points: -1 },
   { value: "Mill próprio", kind: "self", points: -1 },

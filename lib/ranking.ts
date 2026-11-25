@@ -72,6 +72,8 @@ export interface PlayerRow extends Base {
   currentStreak: number;
   bestStreak: number;
   lastPlayed: string;
+  /** Partidas em que foi eliminado (não venceu). */
+  deaths: number;
   selfDeaths: number;
 }
 
@@ -212,6 +214,7 @@ function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups)
         winrate: 0,
         points: 0,
         kills: 0,
+        deaths: 0,
         selfDeaths: 0,
         ownGames: 0,
         ownWins: 0,
@@ -226,6 +229,7 @@ function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups)
     r.points += p.points;
     r.kills += p.kills;
     if (p.selfDeath) r.selfDeaths++;
+    if (!p.is_winner) r.deaths++;
     if (own) r.ownGames++;
     else r.borrowedGames++;
     if (p.is_winner) {

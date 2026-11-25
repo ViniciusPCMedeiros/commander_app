@@ -284,10 +284,10 @@ export function CollectionTable({
         ? proxies.filter((p) => filter !== "needed" || p.needed_qty > 0).map((proxy) => ({ kind: "proxy", proxy }))
         : [];
 
-    // Cores: o que cabe na identidade escolhida (incolor cabe em todas); só "incolor" = só as incolores
-    const wubrg = colors.filter((c) => c !== "C");
+    // Cores: cartas cuja identidade cabe nas cores marcadas (azul + verde → azuis, verdes e azul-verdes).
+    // Incolores só aparecem com o ◇ marcado.
     const matchesColors = (ci: string[]) =>
-      !colors.length || (wubrg.length ? ci.every((c) => wubrg.includes(c)) : ci.length === 0);
+      !colors.length || (ci.length ? ci.every((c) => colors.includes(c)) : colors.includes("C"));
 
     // Busca por nome, tipo ou deck; tipo; e cores
     const q = query.trim().toLowerCase();
@@ -377,8 +377,8 @@ export function CollectionTable({
           </NativeSelect>
           <div
             role="group"
-            aria-label="Cores (mostra o que cabe nessa identidade)"
-            title="Mostra as cartas que cabem num deck dessas cores (incolor sozinho: só as incolores)"
+            aria-label="Filtrar por cores"
+            title="Mostra as cartas dessas cores; ◇ para incluir as incolores"
             className="flex h-10 items-center gap-1 rounded-md border border-input px-2 dark:bg-input/30"
           >
             {COLORS.map((c) => {
@@ -433,7 +433,7 @@ export function CollectionTable({
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {rows.length} {rows.length === 1 ? "carta" : "cartas"}
-            {colors.length > 0 && (colors.every((c) => c === "C") ? " incolores" : " que cabem nessas cores")}
+            {colors.length > 0 && (colors.every((c) => c === "C") ? " incolores" : " dessas cores")}
           </span>
           {hasFilters && (
             <button

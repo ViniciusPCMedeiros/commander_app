@@ -775,3 +775,20 @@ WHERE d.id = mp.deck_id
   AND cardinality(mp.color_identity_snapshot) = 0
   AND cardinality(d.color_identity) > 0
   AND mp.commander_snapshot = d.commander_name || COALESCE(' + ' || d.partner_name, '');
+
+-- Edição automática do jornal: uma por semana (segunda a domingo), publicada logo
+-- depois da meia-noite de domingo para segunda. O índice único garante que ela
+-- só seja gerada uma vez, mesmo que o agendador rode de novo. Edições antigas
+-- (geradas à mão, com períodos de 7 dias corridos) ficam como estão.
+ALTER TABLE public.weekly_newspapers ADD COLUMN automatic BOOLEAN NOT NULL DEFAULT false;
+
+CREATE UNIQUE INDEX weekly_newspapers_one_per_week
+  ON public.weekly_newspapers (week_start) WHERE automatic;
+
+-- Origem de cada análise de estilo de jogo (IA ou gerador local), como já existe
+-- no jornal: o root é avisado quando a rotina semanal caiu no modo local.
+ALTER TABLE public.ai_insights ADD COLUMN source TEXT CHECK (source IN ('ai', 'fallback'));
+
+-- Análises antigas: o gerador local assina o texto
+UPDATE public.ai_insights
+SET source = CASE WHEN content LIKE '%Análise gerada localmente%' THEN 'fallback' ELSE 'ai' END;

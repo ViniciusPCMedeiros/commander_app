@@ -3,7 +3,6 @@ import { ArrowRight, Newspaper } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { GenerateNewspaperButton } from "@/components/generate-newspaper-button";
 import { Markdown } from "@/components/markdown";
 import { WhatsAppShareButton } from "@/components/whatsapp-share-button";
 import { formatDay } from "@/lib/format";
@@ -27,6 +26,9 @@ export function NewspaperCard({ newspaper, aiEnabled }: { newspaper: WeeklyNewsp
             {newspaper.matches_count} partidas
           </CardDescription>
         )}
+        {newspaper && (
+          <CardDescription className="text-xs">Nova edição toda segunda-feira à 00h, com as partidas de segunda a domingo.</CardDescription>
+        )}
       </CardHeader>
       <CardContent>
         {newspaper ? (
@@ -39,7 +41,7 @@ export function NewspaperCard({ newspaper, aiEnabled }: { newspaper: WeeklyNewsp
             </div>
           </article>
         ) : (
-          <p className="text-sm text-muted-foreground">Nenhuma edição publicada ainda. Gere a primeira!</p>
+          <p className="text-sm text-muted-foreground">Nenhuma edição publicada ainda. Nova edição toda segunda-feira à 00h, com as partidas de segunda a domingo.</p>
         )}
       </CardContent>
       <CardFooter className="flex flex-wrap gap-2">
@@ -53,7 +55,6 @@ export function NewspaperCard({ newspaper, aiEnabled }: { newspaper: WeeklyNewsp
         <Button asChild size="sm" variant="outline">
           <Link href="/newspapers">Todas as edições</Link>
         </Button>
-        <GenerateNewspaperButton />
         {newspaper && (
           <WhatsAppShareButton headline={newspaper.headline} content={newspaper.content} edition={newspaper.edition_number} />
         )}

@@ -1,47 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSessionProfile } from "@/lib/auth";
-import { generateNewspaper } from "@/lib/newspaper";
+import { regenerateNewspaper } from "@/lib/newspaper";
+import { isRoot } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/server";
 
 /**
- * Gera a edição do Jornal Semanal com base nos últimos 7 dias. Se já existe
- * uma edição para a mesma semana, ela é atualizada (sem duplicar edições).
+ * Refaz uma edição semanal (mesma semana de segunda a domingo). Só o root: a
+ * Gazeta sai sozinha toda segunda; isto é para quando a IA falhou na hora.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   const session = await getSessionProfile();
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  if (!isRoot(session.profile.role)) {
+    return NextResponse.json({ error: "A Gazeta sai automaticamente toda segunda-feira." }, { status: 403 });
+  }
+  const body = (await request.json().catch(() => null)) as { id?: string } | null;
+  if (!body?.id) return NextResponse.json({ error: "id é obrigatório." }, { status: 400 });
 
-  const { summary, headline, content, source } = await generateNewspaper(session.supabase);
-  const week_start = summary.weekStart.toISOString().slice(0, 10);
-  const week_end = summary.weekEnd.toISOString().slice(0, 10);
-  const fields = {
-    headline,
-    content,
-    matches_count: summary.matches.length,
-    generated_by: session.profile.id,
-    source,
-  };
-
-  const admin = createAdminClient();
-  const { data: existing } = await admin
-    .from("weekly_newspapers")
-    .select("id")
-    .eq("week_start", week_start)
-    .eq("week_end", week_end)
-    .order("edition_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { data, error } = existing
-    ? await admin.from("weekly_newspapers").update(fields).eq("id", existing.id).select("*").single()
-    : await admin.from("weekly_newspapers").insert({ ...fields, week_start, week_end }).select("*").single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  revalidatePath("/");
-  revalidatePath("/newspapers");
-  revalidatePath(`/newspapers/${data.id}`);
-  return NextResponse.json({ newspaper: data, source, updated: Boolean(existing) });
+  try {
+    const { source } = await regenerateNewspaper(createAdminClient(), body.id);
+    revalidatePath("/", "layout");
+    return NextResponse.json({ source });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Erro" }, { status: 400 });
+  }
 }
 
 /** Última edição arquivada. */

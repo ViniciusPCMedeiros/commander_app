@@ -16,11 +16,14 @@ export function InsightCard({
   insight,
   currentGames,
   aiEnabled,
+  canGenerate,
 }: {
   userId: string;
   insight: AIInsight | null;
   currentGames: number;
   aiEnabled: boolean;
+  /** Só o root gera fora do calendário semanal. */
+  canGenerate: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -69,10 +72,15 @@ export function InsightCard({
           <p className="text-sm text-muted-foreground">Nenhuma análise ainda.</p>
         )}
       </CardContent>
-      <CardFooter>
-        <Button size="sm" variant="secondary" onClick={generate} disabled={loading}>
-          {loading ? <Loader2 className="animate-spin" /> : <Sparkles />} {insight ? "Atualizar análise" : "Gerar análise"}
-        </Button>
+      <CardFooter className="flex flex-wrap items-center gap-3">
+        {canGenerate && (
+          <Button size="sm" variant="secondary" onClick={generate} disabled={loading}>
+            {loading ? <Loader2 className="animate-spin" /> : <Sparkles />} {insight ? "Atualizar análise" : "Gerar análise"}
+          </Button>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Atualizada toda segunda-feira à 00h, para quem jogou partidas novas na semana.
+        </p>
       </CardFooter>
     </Card>
   );

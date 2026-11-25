@@ -165,7 +165,7 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
           ))}
         </div>
         <p className="pt-2 pb-1 text-xs text-muted-foreground">
-          Abate é de quem foi marcado em “eliminado por”. Conceder ou “Outro” não tira pontos. Empate em pontos: mais
+          ⚔ abates · ☠ mortes (partidas em que foi eliminado). Abate é de quem foi marcado em “eliminado por”. Conceder ou “Outro” não tira pontos. Empate em pontos: mais
           vitórias, depois mais abates.
         </p>
       </details>
@@ -242,6 +242,7 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                   games: p.games,
                   points: p.points,
                   kills: p.kills,
+                  deaths: p.deaths,
                   winrate: p.winrate,
                   currentStreak: p.currentStreak,
                   ownWins: p.ownWins,

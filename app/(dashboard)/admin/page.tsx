@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Hourglass } from "lucide-react";
+import { Bot, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDay } from "@/lib/format";
 import { creatableRoles, isModerator, isRoot } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/server";
 import type { PlayerStats, UserProfile } from "@/lib/types";
+import { loadAIIssues } from "@/lib/ai-issues";
+import { AIRetryButton } from "./ai-retry-button";
 import { CreateUserForm } from "./create-user-form";
 import { RoleSelect } from "./role-select";
 import { PageHeader } from "@/components/page-header";
@@ -28,6 +30,7 @@ export default async function AdminPage() {
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from("matches").select("id", { count: "exact", head: true }).eq("status", "pending"),
   ]);
+  const aiIssues = isRoot(profile.role) ? await loadAIIssues(admin) : null;
 
   // O root é invisível: só aparece para outro root
   const members = (users ?? []).filter((u) => u.role !== "root" || isRoot(profile.role));
@@ -108,6 +111,57 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      {aiIssues && (
+        <Card id="ia" className={aiIssues.total ? "border-amber-500/40" : undefined}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="size-5" /> IA da rotina semanal
+            </CardTitle>
+            <CardDescription>
+              A Gazeta e as análises dos jogadores saem sozinhas toda segunda à 00h. Se a IA não responder (fora do ar
+              ou cota do dia esgotada), elas saem no modo local e aparecem aqui para você refazer.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {!aiIssues.configured && (
+              <p className="text-sm text-amber-300">IA não configurada: defina AI_API_KEY no .env.local do servidor.</p>
+            )}
+            {aiIssues.configured && aiIssues.total === 0 && (
+              <p className="text-sm text-muted-foreground">Tudo em dia: a última rotina saiu pela IA.</p>
+            )}
+            {aiIssues.newspaper && (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
+                <span className="flex-1">
+                  Gazeta #{aiIssues.newspaper.edition} ({formatDay(aiIssues.newspaper.weekStart)} a{" "}
+                  {formatDay(aiIssues.newspaper.weekEnd)}) saiu no modo local
+                </span>
+                <AIRetryButton
+                  endpoint="/api/ai/newspaper"
+                  body={{ id: aiIssues.newspaper.id }}
+                  label={`Gazeta #${aiIssues.newspaper.edition}`}
+                />
+              </div>
+            )}
+            {aiIssues.insights.map((i) => (
+              <div key={i.userId} className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
+                <span className="flex-1">
+                  Análise de{" "}
+                  <Link href={`/players/${i.userId}`} className="font-medium hover:underline">
+                    {i.name}
+                  </Link>{" "}
+                  saiu no modo local em {formatDate(i.createdAt)}
+                </span>
+                <AIRetryButton
+                  endpoint="/api/ai/player-insight"
+                  body={{ userId: i.userId }}
+                  label={`Análise de ${i.name}`}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

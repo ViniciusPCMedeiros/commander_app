@@ -259,7 +259,7 @@ write_env() {
     # Preserva a configuração de IA existente (ex.: sua chave real do Gemini)
     local ai_url ai_model ai_key
     ai_url="$(env_get AI_BASE_URL)";  ai_url="${ai_url:-https://generativelanguage.googleapis.com/v1beta/openai}"
-    ai_model="$(env_get AI_MODEL)";   ai_model="${ai_model:-gemini-2.5-flash}"
+    ai_model="$(env_get AI_MODEL)";   ai_model="${ai_model:-gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash}"
     ai_key="$(env_get AI_API_KEY)";   ai_key="${ai_key:-placeholder}"
     local backup="" extra=""
     if [ -f "$ENV_FILE" ]; then

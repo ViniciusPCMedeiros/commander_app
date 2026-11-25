@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Play } from "lucide-react";
+import { Flame, Play } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { RankMovement, RankPosition } from "@/components/rank-badges";
@@ -18,6 +18,7 @@ export interface RaceRow {
   winrate: number;
   points: number;
   kills: number;
+  deaths: number;
   currentStreak: number;
   ownWins: number;
   ownGames: number;
@@ -29,7 +30,27 @@ export interface RaceRow {
   fewGames: boolean;
 }
 
-const ROW_H = 64;
+const ROW_H = 84;
+
+/** Número com rótulo pequeno embaixo (colunas do placar). */
+function Stat({
+  value,
+  label,
+  title,
+  className,
+}: {
+  value: React.ReactNode;
+  label: string;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <div className="w-14 text-center" title={title}>
+      <div className={cn("text-lg leading-tight font-semibold tabular-nums", className)}>{value}</div>
+      <div className="text-[10px] tracking-wider text-muted-foreground uppercase">{label}</div>
+    </div>
+  );
+}
 
 /**
  * Placar "de corrida": as linhas começam na ordem anterior (antes da última sessão)
@@ -71,7 +92,7 @@ export function RaceBoard({ rows, metric }: { rows: RaceRow[]; metric: "points" 
             >
               <div
                 className={cn(
-                  "flex h-[58px] items-center gap-3 rounded-xl border bg-card px-3 transition-[box-shadow,border-color,background-color] duration-700",
+                  "flex h-[76px] items-center gap-3 rounded-xl border bg-card px-3 transition-[box-shadow,border-color,background-color] duration-700",
                   done &&
                     moved &&
                     r.delta! > 0 &&
@@ -90,32 +111,54 @@ export function RaceBoard({ rows, metric }: { rows: RaceRow[]; metric: "points" 
                 <div className={cn("w-9 shrink-0 transition-opacity duration-500", done ? "opacity-100" : "opacity-0")}>
                   <RankMovement delta={r.delta} />
                 </div>
-                <Avatar className="size-9 shrink-0">
+                <Avatar className="hidden size-11 shrink-0 sm:flex">
                   {r.avatar_url && <AvatarImage src={r.avatar_url} alt="" />}
-                  <AvatarFallback className="text-xs">{initials(r.name)}</AvatarFallback>
+                  <AvatarFallback>{initials(r.name)}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <Link href={`/players/${r.id}`} className="block truncate font-semibold hover:underline">
+                  <Link href={`/players/${r.id}`} className="block truncate text-base font-semibold hover:underline">
                     {r.name}
                   </Link>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {r.currentStreak > 0 && <span className="text-orange-400">🔥 {r.currentStreak} seguida(s) · </span>}
-                    <span className="hidden sm:inline">
-                      próprios {r.ownWins}/{r.ownGames} · emprestados {r.borrowedWins}/{r.borrowedGames}
+                  {/* Celular: resumo embaixo do nome (as colunas não cabem) */}
+                  <div className="truncate text-sm text-muted-foreground tabular-nums sm:hidden">
+                    {metric === "points" && <>{r.wins}V · </>}
+                    <span className="text-emerald-300">⚔ {r.kills}</span> ·{" "}
+                    <span className="text-rose-300">☠ {r.deaths}</span> · {r.games}J
+                  </div>
+                  <div className="flex min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
+                    {r.currentStreak > 0 && (
+                      <span className="flex shrink-0 items-center gap-1 text-orange-400">
+                        <Flame className="size-3.5" />
+                        {r.currentStreak} seguida(s)
+                      </span>
+                    )}
+                    <span className="hidden truncate sm:inline">
+                      {r.currentStreak > 0 && "· "}próprios {r.ownWins}/{r.ownGames} · emprestados {r.borrowedWins}/
+                      {r.borrowedGames}
                     </span>
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-lg leading-none font-black tabular-nums">
+                <div className={cn("hidden shrink-0 items-center sm:flex", r.fewGames && "[&_.win]:opacity-60")}>
+                  {metric === "points" && <Stat value={r.wins} label="Vitórias" />}
+                  <Stat value={r.kills} label="Abates" title="Abates (⚔)" className="text-emerald-300" />
+                  <Stat value={r.deaths} label="Mortes" title="Mortes (☠)" className="text-rose-300" />
+                  <Stat value={r.games} label="Partidas" />
+                  <Stat
+                    value={
+                      <span className="win">
+                        {formatPct(r.winrate).replace(",0%", "%")}
+                        {r.fewGames && "*"}
+                      </span>
+                    }
+                    label="Win%"
+                  />
+                </div>
+                <div className="w-16 shrink-0 text-center sm:ml-2 sm:w-20 sm:border-l sm:border-border/60 sm:pl-3">
+                  <div className="text-2xl leading-none font-black text-primary tabular-nums sm:text-3xl">
                     {metric === "points" ? r.points : r.wins}
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {metric === "points" ? " pts" : "V"}
-                    </span>
                   </div>
-                  <div className={cn("text-xs text-muted-foreground tabular-nums", r.fewGames && "opacity-60")}>
-                    {metric === "points" && `${r.wins}V · `}
-                    <span title="Abates">⚔ {r.kills}</span> · {r.games}J · {formatPct(r.winrate)}
-                    {r.fewGames && "*"}
+                  <div className="mt-1 text-[10px] tracking-wider text-muted-foreground uppercase">
+                    {metric === "points" ? "pontos" : "vitórias"}
                   </div>
                 </div>
               </div>

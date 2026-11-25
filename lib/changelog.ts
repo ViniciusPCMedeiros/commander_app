@@ -16,6 +16,52 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.2.0",
+    date: "2026-11-25T12:14:00-03:00",
+    title: "IA ligada, mortes no ranking e no perfil",
+    changes: [
+      {
+        kind: "novo",
+        text: "IA de verdade (Gemini, plano gratuito) na Gazeta e no estilo de jogo; se a cota do dia acabar, o texto local continua funcionando.",
+      },
+      { kind: "novo", text: "Ranking mostra as mortes (☠) de cada jogador ao lado dos abates (⚔)." },
+      {
+        kind: "melhoria",
+        text: "Estilo de jogo mais completo: números comparados com o grupo, desempenho por assento e por deck, confrontos diretos, rivalidades, dicas para a próxima mesa e um comandante sugerido.",
+      },
+      {
+        kind: "novo",
+        text: "A Gazeta sai sozinha toda segunda-feira à 00h, com as partidas de segunda a domingo — uma edição por semana. O botão de gerar edição saiu.",
+      },
+      {
+        kind: "novo",
+        text: "O estilo de jogo de cada jogador também é atualizado sozinho toda segunda-feira, só para quem jogou partidas novas. Gerar fora disso ficou restrito ao root.",
+      },
+      {
+        kind: "novo",
+        text: "Se a IA falhar na rotina semanal, o root recebe um aviso e pode refazer a Gazeta ou a análise de cada jogador no Admin.",
+      },
+      {
+        kind: "melhoria",
+        text: "Gazeta com mesa a mesa, placar de pontos da semana, quem subiu e caiu no ranking, primeiras vitórias, sequências e um gancho para a próxima rodada.",
+      },
+      { kind: "correcao", text: "A Gazeta mostrava o nome da conta de sistema quando ela gerava a edição." },
+      { kind: "melhoria", text: "Eliminar por mill do inimigo passa a valer +1 ponto (antes +2), como combate, combo e drenagem." },
+      {
+        kind: "novo",
+        text: "Perfil do jogador com as mortes por tipo e o “carrasco”, quem mais eliminou aquele jogador.",
+      },
+      {
+        kind: "melhoria",
+        text: "Placar do ranking maior e mais legível: vitórias, abates, mortes, partidas e Win% em colunas, com os pontos em destaque.",
+      },
+      {
+        kind: "melhoria",
+        text: "Filtro de cor da coleção: as cartas incolores só aparecem com o ◇ marcado, em vez de vir junto com qualquer cor.",
+      },
+    ],
+  },
+  {
     version: "1.1.1",
     date: "2026-11-25T11:00:00-03:00",
     title: "Versões no histórico e correções",

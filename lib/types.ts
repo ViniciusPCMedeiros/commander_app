@@ -146,6 +146,8 @@ export interface AIInsight {
   insight_type: "player_profile" | "monthly_recap";
   content: string;
   games_snapshot: number;
+  /** IA de verdade ou gerador local (modo de fallback). */
+  source: "ai" | "fallback" | null;
   created_at: string;
 }
 

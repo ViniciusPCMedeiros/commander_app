@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Swords } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { GenerateNewspaperButton } from "@/components/generate-newspaper-button";
 import { isAIConfigured } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { formatDay, markdownExcerpt } from "@/lib/format";
@@ -43,14 +42,15 @@ export default async function NewspapersPage() {
           <>
             Arquivo do Jornal Semanal do Playgroup · {editions.length} edição(ões) ·{" "}
             {isAIConfigured() ? "escrito pelo Gemini" : "IA não configurada (gerador local)"}
+            <br />
+            Nova edição toda segunda-feira à 00h, com as partidas de segunda a domingo.
           </>
         }
-        actions={<GenerateNewspaperButton variant="default" />}
       />
 
       {!latest && (
         <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">Nenhuma edição ainda. Gere a primeira!</CardContent>
+          <CardContent className="py-10 text-center text-muted-foreground">Nenhuma edição ainda. Nova edição toda segunda-feira à 00h, com as partidas de segunda a domingo.</CardContent>
         </Card>
       )}
 
