@@ -14,7 +14,7 @@ import { requireUser } from "@/lib/auth";
 import { formatDate, formatDateTime, initials } from "@/lib/format";
 import { loadRanking, sortRows } from "@/lib/ranking";
 import { isRoot } from "@/lib/roles";
-import { seasonLabel, seasonStatus, themeColor, titleFor, type Season } from "@/lib/seasons";
+import { closeDeadline, seasonLabel, seasonStatus, themeColor, titleFor, type Season } from "@/lib/seasons";
 import { currentSeason, loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +33,8 @@ function statusLine(s: Season, now = new Date()) {
   const status = seasonStatus(s, now);
   if (status === "upcoming") return `Começa em ${formatDateTime(s.starts_at)} (${timeLeft(s.starts_at, now)})`;
   if (status === "active") return `Em andamento até ${formatDateTime(s.ends_at)} · ${timeLeft(s.ends_at, now)}`;
-  if (status === "ended") return "Terminou — o resultado sai em instantes.";
+  if (status === "ended")
+    return `Terminou — o resultado sai quando as últimas partidas forem moderadas (até ${formatDate(closeDeadline(s).toISOString())}).`;
   return `Encerrada em ${formatDate(s.closed_at!)} · ${formatDate(s.starts_at)} a ${formatDate(s.ends_at)}`;
 }
 

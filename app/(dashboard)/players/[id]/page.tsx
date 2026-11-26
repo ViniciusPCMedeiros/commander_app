@@ -224,7 +224,7 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
     .map((a) => ({ def: a, value: Math.min(myProgress?.get(a.id) ?? 0, a.target ?? 1) }))
     .sort((a, b) => (b.def.target ? b.value / b.def.target : 0) - (a.def.target ? a.value / a.def.target : 0));
   const hiddenSecrets = ACHIEVEMENTS.filter((a) => a.secret && !have.has(a.id)).length;
-  const matchUnlocks = await loadMatchChips(supabase);
+  const matchUnlocks = await loadMatchChips(supabase, { achievements, seasons });
 
   // Temporadas: conquistas de cada uma e os títulos (Lenda/Coroa) que o jogador tem
   const seasonRows = [...seasons]

@@ -65,6 +65,17 @@ export async function createMatch(input: MatchInput): Promise<{ error?: string; 
   const playedAt = input.played_at ? new Date(input.played_at) : new Date();
   if (Number.isNaN(playedAt.getTime())) return { error: "Data inválida." };
 
+  // Temporada encerrada já entregou os prêmios: partida nova não pode cair no período dela
+  const { data: closedSeason } = await supabase
+    .from("seasons")
+    .select("number")
+    .not("closed_at", "is", null)
+    .lte("starts_at", playedAt.toISOString())
+    .gt("ends_at", playedAt.toISOString())
+    .maybeSingle();
+  if (closedSeason)
+    return { error: `Essa data é da Temporada ${closedSeason.number}, que já foi encerrada. Confira a data da partida.` };
+
   // Snapshots imutáveis: dono, comandante e cores do deck neste momento
   const { data: decks, error: decksError } = await supabase
     .from("decks")

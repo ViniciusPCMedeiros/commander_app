@@ -30,7 +30,7 @@ export const CHANGELOG: Release[] = [
       },
       {
         kind: "novo",
-        text: "No fim de cada temporada saem o Pódio e o Campeão, e a Gazeta publica uma edição especial de encerramento. A Gazeta semanal também acompanha a briga da temporada.",
+        text: "No fim de cada temporada — assim que as últimas partidas do período forem moderadas — saem o Pódio e o Campeão, e a Gazeta publica uma edição especial de encerramento. A Gazeta semanal também acompanha a briga da temporada.",
       },
       { kind: "novo", text: "Ranking por temporada: escolha a temporada nos filtros do Ranking." },
       {

@@ -22,6 +22,7 @@ import {
 } from "@/lib/actions/seasons";
 import {
   BASE_SEASON_ACHIEVEMENTS,
+  CLOSE_GRACE_DAYS,
   freezeAchievements,
   SEASON_ICONS,
   seasonStatus,
@@ -51,7 +52,12 @@ const addMonths = (d: Date, n: number) => {
   return x;
 };
 
-const STATUS_LABEL = { upcoming: "Agendada", active: "Em andamento", ended: "Encerrando…", closed: "Encerrada" };
+const STATUS_LABEL = {
+  upcoming: "Agendada",
+  active: "Em andamento",
+  ended: "Aguardando as últimas aprovações",
+  closed: "Encerrada",
+};
 
 export function SeasonAdmin({
   seasons,
@@ -86,6 +92,13 @@ export function SeasonAdmin({
   const themeId = themes.some((t) => t.id === chosenTheme) ? chosenTheme : (themes[0]?.id ?? "");
   const [startsAt, setStartsAt] = useState(toLocal(defaultStart));
   const [endsAt, setEndsAt] = useState(toLocal(addMonths(defaultStart, 1)));
+  // Depois de lançar, o início sugerido muda (logo após a nova temporada): o formulário acompanha
+  const [lastDefault, setLastDefault] = useState(defaultStartIso);
+  if (lastDefault !== defaultStartIso) {
+    setLastDefault(defaultStartIso);
+    setStartsAt(toLocal(defaultStart));
+    setEndsAt(toLocal(addMonths(defaultStart, 1)));
+  }
   const theme = themes.find((t) => t.id === themeId);
   const preview = useMemo(() => {
     const s = new Date(fromLocal(startsAt));
@@ -114,7 +127,8 @@ export function SeasonAdmin({
           </CardTitle>
           <CardDescription>
             As conquistas ficam travadas no lançamento; dá para mudar só a data de fim. No fim, a rotina automática
-            encerra sozinha: pódio, campeão, Coroa e Lenda.
+            encerra sozinha (pódio, campeão, Coroa e Lenda) assim que as partidas do período forem moderadas — no
+            máximo {CLOSE_GRACE_DAYS} dias depois.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -158,8 +172,19 @@ export function SeasonAdmin({
                       className="border-rose-500/50 text-rose-300"
                       disabled={pending}
                       onClick={() =>
-                        confirm(`Encerrar a T${s.number} agora? Pódio, campeão e títulos saem na hora.`) &&
-                        run(() => endSeasonNow(s.id), "Temporada encerrada.")
+                        confirm(
+                          `Encerrar a T${s.number} agora? Pódio, campeão e títulos saem assim que não houver partida pendente do período.`,
+                        ) &&
+                        start(async () => {
+                          const res = await endSeasonNow(s.id);
+                          if (res.error) return void toast.error(res.error);
+                          if (res.waiting)
+                            toast.info(
+                              `Fim marcado. ${res.waiting} partida(s) do período aguardam moderação: o resultado sai quando forem aprovadas ou rejeitadas.`,
+                            );
+                          else toast.success("Temporada encerrada.");
+                          router.refresh();
+                        })
                       }
                     >
                       <Flag /> Encerrar agora

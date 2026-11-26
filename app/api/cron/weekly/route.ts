@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { syncAchievements } from "@/lib/achievement-sync";
 import { refreshWeeklyInsights } from "@/lib/insights";
 import { publishSeasonNewspaper } from "@/lib/season-newspaper";
-import { closeDueSeasons } from "@/lib/seasons-data";
+import { closeDueSeasons, seasonsMissingNewspaper } from "@/lib/seasons-data";
 import { publishWeeklyNewspaper } from "@/lib/newspaper";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -31,13 +31,25 @@ export async function POST(request: NextRequest) {
   try {
     // Antes da Gazeta, para ela já ver as conquistas da semana
     result.achievements = await syncAchievements(admin);
-    // Temporadas vencidas: pódio, campeão, Coroa e Lenda
+    // Temporadas vencidas (sem partidas pendentes do período): pódio, campeão, Coroa e Lenda
     const closed = await closeDueSeasons(admin);
     if (closed.length) {
       result.seasons = closed.map((c) => c.number);
       console.log(`Temporada(s) encerrada(s): ${closed.map((c) => `T${c.number}`).join(", ")}.`);
-      for (const season of closed) await publishSeasonNewspaper(admin, season);
       revalidatePath("/", "layout");
+    }
+    // Edição de encerramento: também refaz as que falharam em rodadas anteriores.
+    // Uma falha aqui não impede a Gazeta semanal.
+    for (const season of await seasonsMissingNewspaper(admin)) {
+      try {
+        const res = await publishSeasonNewspaper(admin, season);
+        if (res.status === "published") {
+          console.log(`Gazeta: edição de encerramento da T${season.number} publicada (${res.source}).`);
+          revalidatePath("/newspapers");
+        }
+      } catch (error) {
+        console.error(`Gazeta: falha na edição de encerramento da T${season.number}:`, error);
+      }
     }
     const newspaper = await publishWeeklyNewspaper(admin);
     result.newspaper = newspaper;

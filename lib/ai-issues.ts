@@ -6,8 +6,8 @@ export interface AIIssues {
   configured: boolean;
   /** Jogadores cuja análise mais recente saiu pelo gerador local. */
   insights: { userId: string; name: string; createdAt: string }[];
-  /** Última edição automática da Gazeta, se ela saiu pelo gerador local. */
-  newspaper: { id: string; edition: number; weekStart: string; weekEnd: string } | null;
+  /** Última edição semanal e última de encerramento de temporada que saíram pelo gerador local. */
+  newspapers: { id: string; edition: number; weekStart: string; weekEnd: string }[];
   total: number;
 }
 
@@ -17,23 +17,25 @@ export interface AIIssues {
  */
 export async function loadAIIssues(admin: SupabaseClient): Promise<AIIssues> {
   const configured = isAIConfigured();
-  if (!configured) return { configured, insights: [], newspaper: null, total: 0 };
+  if (!configured) return { configured, insights: [], newspapers: [], total: 0 };
 
-  const [{ data: insights }, { data: users }, { data: newspaper }] = await Promise.all([
+  const latestEdition = (kind: "weekly" | "season") => {
+    const q = admin.from("weekly_newspapers").select("id, edition_number, week_start, week_end, source");
+    return (kind === "weekly" ? q.eq("automatic", true) : q.not("season_id", "is", null))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+  };
+  // A semanal e a de encerramento separadas: as duas podem sair na mesma rodada
+  const [{ data: insights }, { data: users }, { data: weekly }, { data: season }] = await Promise.all([
     admin
       .from("ai_insights")
       .select("user_id, source, created_at")
       .eq("insight_type", "player_profile")
       .order("created_at", { ascending: false }),
     admin.from("users").select("id, name, role"),
-    admin
-      .from("weekly_newspapers")
-      .select("id, edition_number, week_start, week_end, source")
-      // Última edição gerada pela rotina: a semanal ou a de encerramento de temporada
-      .or("automatic.eq.true,season_id.not.is.null")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    latestEdition("weekly"),
+    latestEdition("season"),
   ]);
 
   const latest = new Map<string, { source: string | null; created_at: string }>();
@@ -43,15 +45,9 @@ export async function loadAIIssues(admin: SupabaseClient): Promise<AIIssues> {
     .map((u) => ({ userId: u.id as string, name: u.name as string, createdAt: latest.get(u.id)!.created_at }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const paper =
-    newspaper?.source === "fallback"
-      ? {
-          id: newspaper.id,
-          edition: newspaper.edition_number,
-          weekStart: newspaper.week_start,
-          weekEnd: newspaper.week_end,
-        }
-      : null;
+  const papers = [weekly, season]
+    .filter((n) => n?.source === "fallback")
+    .map((n) => ({ id: n!.id, edition: n!.edition_number, weekStart: n!.week_start, weekEnd: n!.week_end }));
 
-  return { configured, insights: fallbackInsights, newspaper: paper, total: fallbackInsights.length + (paper ? 1 : 0) };
+  return { configured, insights: fallbackInsights, newspapers: papers, total: fallbackInsights.length + papers.length };
 }

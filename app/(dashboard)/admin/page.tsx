@@ -139,19 +139,14 @@ export default async function AdminPage() {
             {aiIssues.configured && aiIssues.total === 0 && (
               <p className="text-sm text-muted-foreground">Tudo em dia: a última rotina saiu pela IA.</p>
             )}
-            {aiIssues.newspaper && (
-              <div className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
+            {aiIssues.newspapers.map((n) => (
+              <div key={n.id} className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
                 <span className="flex-1">
-                  Gazeta #{aiIssues.newspaper.edition} ({formatDay(aiIssues.newspaper.weekStart)} a{" "}
-                  {formatDay(aiIssues.newspaper.weekEnd)}) saiu no modo local
+                  Gazeta #{n.edition} ({formatDay(n.weekStart)} a {formatDay(n.weekEnd)}) saiu no modo local
                 </span>
-                <AIRetryButton
-                  endpoint="/api/ai/newspaper"
-                  body={{ id: aiIssues.newspaper.id }}
-                  label={`Gazeta #${aiIssues.newspaper.edition}`}
-                />
+                <AIRetryButton endpoint="/api/ai/newspaper" body={{ id: n.id }} label={`Gazeta #${n.edition}`} />
               </div>
-            )}
+            ))}
             {aiIssues.insights.map((i) => (
               <div key={i.userId} className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
                 <span className="flex-1">

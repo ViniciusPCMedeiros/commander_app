@@ -1,17 +1,23 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadAchievements, unlocksByMatch, type AchievementDef } from "@/lib/achievements";
-import { SEASON_ICONS } from "@/lib/seasons";
+
+type Achievements = Awaited<ReturnType<typeof loadAchievements>>;
+import { SEASON_ICONS, type Season } from "@/lib/seasons";
 import { loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
 
 /**
  * Selos do card da partida: conquistas gerais e de temporada liberadas em cada
  * partida (matchId → jogador → conquistas). As de temporada levam o número dela.
  */
-export async function loadMatchChips(supabase: SupabaseClient): Promise<Map<string, Map<string, AchievementDef[]>>> {
+export async function loadMatchChips(
+  supabase: SupabaseClient,
+  /** O que a página já carregou (evita buscar tudo de novo). */
+  loaded: { achievements?: Achievements; seasons?: Season[] } = {},
+): Promise<Map<string, Map<string, AchievementDef[]>>> {
   const [achievements, seasons, seasonUnlocks] = await Promise.all([
-    loadAchievements(supabase),
-    loadSeasons(supabase),
+    loaded.achievements ?? loadAchievements(supabase),
+    loaded.seasons ?? loadSeasons(supabase),
     loadSeasonUnlocks(supabase),
   ]);
   const chips = unlocksByMatch(achievements);

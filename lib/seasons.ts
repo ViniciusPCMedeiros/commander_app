@@ -489,6 +489,11 @@ export function seasonStatus(s: Pick<Season, "starts_at" | "ends_at" | "closed_a
   return "ended"; // passou da data, aguardando o encerramento automático
 }
 
+/** Até quantos dias depois do fim a temporada espera as partidas pendentes do período. */
+export const CLOSE_GRACE_DAYS = 7;
+export const closeDeadline = (s: Pick<Season, "ends_at">) =>
+  new Date(new Date(s.ends_at).getTime() + CLOSE_GRACE_DAYS * 24 * 60 * 60 * 1000);
+
 export const seasonLabel = (s: Pick<Season, "number" | "theme">) => `T${s.number} · ${s.theme.name}`;
 
 /** Títulos: chave gravada em users.display_title. */
@@ -627,14 +632,27 @@ export interface SeasonUnlock {
 }
 
 type Totals = { points: number; wins: number; kills: number; games: number };
-const byStanding = (a: [string, Totals], b: [string, Totals]) =>
-  b[1].points - a[1].points || b[1].wins - a[1].wins || b[1].kills - a[1].kills || b[1].games - a[1].games;
+const byNumbers = (a: Totals, b: Totals) =>
+  b.points - a.points || b.wins - a.wins || b.kills - a.kills || b.games - a.games;
+
+/** Partidas mínimas na temporada para alguém contar como líder (antes disso, ninguém é). */
+export const SEASON_LEADER_MIN_GAMES = 3;
 
 /**
  * Conquistas de partida de uma temporada (sem pódio/campeão/títulos, que saem no
  * encerramento). `parts`: participações aprovadas dentro do período, de todos.
+ * `visible`: quem pode ganhar (todos menos o root), com o nome — o desempate final
+ * da classificação é pelo nome, igual ao ranking (sortRows).
  */
-export function computeSeasonUnlocks(season: Season, parts: SeasonPart[], visible: Set<string>) {
+export function computeSeasonUnlocks(season: Season, parts: SeasonPart[], visible: Map<string, string>) {
+  const byStanding = (a: [string, Totals], b: [string, Totals]) =>
+    byNumbers(a[1], b[1]) || (visible.get(a[0]) ?? "").localeCompare(visible.get(b[0]) ?? "");
+  /** Líder sozinho na frente (empate nos números = sem líder), com o mínimo de partidas. */
+  const soleLeader = () => {
+    const [first, second] = [...totals.entries()].filter(([id]) => visible.has(id)).sort(byStanding);
+    if (!first || first[1].games < SEASON_LEADER_MIN_GAMES) return null;
+    return second && byNumbers(first[1], second[1]) === 0 ? null : first[0];
+  };
   const states = new Map<string, State>();
   const state = (id: string) => states.get(id) ?? (states.set(id, newState()), states.get(id)!);
   const unlocks: SeasonUnlock[] = [];
@@ -647,7 +665,7 @@ export function computeSeasonUnlocks(season: Season, parts: SeasonPart[], visibl
   );
   for (const table of tables) {
     const scores = scoreMatch(table);
-    const leader = [...totals.entries()].filter(([id]) => visible.has(id)).sort(byStanding)[0]?.[0] ?? null;
+    const leader = soleLeader();
 
     for (const p of table) {
       const s = state(p.pilot_id);
@@ -683,7 +701,8 @@ export function computeSeasonUnlocks(season: Season, parts: SeasonPart[], visibl
           set.add(p.deck_id);
           s.winDecks.set(k, set);
         }
-        if (p.seat_order) s.winSeats.add(p.seat_order);
+        // Só os 4 primeiros assentos contam (mesas maiores têm assentos 5+)
+        if (p.seat_order && p.seat_order <= 4) s.winSeats.add(p.seat_order);
       } else {
         s.winStreak = 0;
         s.lossStreak++;

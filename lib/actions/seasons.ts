@@ -20,7 +20,7 @@ import {
   type SeasonAchievementInput,
 } from "@/lib/seasons";
 import { publishSeasonNewspaper } from "@/lib/season-newspaper";
-import { closeDueSeasons, loadCustomBase, loadSeasons } from "@/lib/seasons-data";
+import { closeDueSeasons, loadCustomBase, loadSeasons, pendingMatchesIn } from "@/lib/seasons-data";
 import { createAdminClient } from "@/lib/supabase/server";
 
 type Result = { error?: string };
@@ -204,24 +204,29 @@ export async function updateSeasonEnd(seasonId: string, endsAt: string): Promise
   return {};
 }
 
-/** Encerra agora: o fim vira este momento, e pódio, campeão e títulos saem na hora. */
-export async function endSeasonNow(seasonId: string): Promise<Result> {
+/**
+ * Encerra agora: o fim vira este momento. Pódio, campeão e títulos saem na hora
+ * se não houver partida pendente do período; senão, assim que forem moderadas.
+ */
+export async function endSeasonNow(seasonId: string): Promise<Result & { waiting?: number }> {
   const { supabase } = await requireRoot();
   const season = (await loadSeasons(supabase)).find((s) => s.id === seasonId);
   if (!season) return { error: "Temporada não encontrada." };
   if (seasonStatus(season) !== "active" && seasonStatus(season) !== "ended")
     return { error: "Só dá para encerrar uma temporada em andamento." };
   const admin = createAdminClient();
-  if (seasonStatus(season) === "active") {
-    const { error } = await admin.from("seasons").update({ ends_at: new Date().toISOString() }).eq("id", seasonId);
+  const endsAt = seasonStatus(season) === "active" ? new Date().toISOString() : season.ends_at;
+  if (endsAt !== season.ends_at) {
+    const { error } = await admin.from("seasons").update({ ends_at: endsAt }).eq("id", seasonId);
     if (error) return { error: error.message };
   }
   await syncAchievements(admin);
   const closed = await closeDueSeasons(admin);
-  // Edição especial da Gazeta (a IA pode levar alguns segundos)
-  for (const s of closed) await publishSeasonNewspaper(admin, s);
+  // Edição especial da Gazeta (a IA pode levar alguns segundos); se falhar, a rotina tenta de novo
+  for (const s of closed) await publishSeasonNewspaper(admin, s).catch((e) => console.error("Gazeta de encerramento:", e));
   revalidateSeasons();
   revalidatePath("/newspapers");
+  if (!closed.length) return { waiting: await pendingMatchesIn(admin, { ...season, ends_at: endsAt }) };
   return {};
 }
 

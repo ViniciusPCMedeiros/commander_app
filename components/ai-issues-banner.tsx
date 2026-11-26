@@ -7,7 +7,7 @@ export function AIIssuesBanner({ issues }: { issues: AIIssues }) {
   if (issues.configured && issues.total === 0) return null;
   const parts = [
     issues.insights.length && `${issues.insights.length} análise${issues.insights.length > 1 ? "s" : ""} de jogador`,
-    issues.newspaper && `a Gazeta #${issues.newspaper.edition}`,
+    issues.newspapers.length && `a Gazeta ${issues.newspapers.map((n) => `#${n.edition}`).join(" e ")}`,
   ].filter(Boolean);
 
   return (

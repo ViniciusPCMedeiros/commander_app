@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import {
+  closeDeadline,
   computeSeasonUnlocks,
   finalAwards,
   seasonStatus,
@@ -78,10 +79,24 @@ async function seasonParts(supabase: SupabaseClient, season: Season): Promise<Se
   );
 }
 
-/** Jogadores que podem ganhar conquistas (todos menos o root). */
+/** Jogadores que podem ganhar conquistas (todos menos o root), com o nome para o desempate. */
 async function visiblePlayers(admin: SupabaseClient) {
-  const { data } = await admin.from("users").select("id, role");
-  return new Set((data ?? []).filter((u) => u.role !== "root").map((u) => u.id as string));
+  const { data, error } = await admin.from("users").select("id, name, role");
+  // Sem a lista, a temporada fecharia sem ninguém na classificação: melhor falhar e tentar de novo
+  if (error || !data) throw new Error(`Falha ao carregar os jogadores: ${error?.message}`);
+  return new Map(data.filter((u) => u.role !== "root").map((u) => [u.id as string, u.name as string]));
+}
+
+/** Partidas do período da temporada ainda esperando aprovação. */
+export async function pendingMatchesIn(supabase: SupabaseClient, season: Season): Promise<number> {
+  const { count, error } = await supabase
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending")
+    .gte("played_at", season.starts_at)
+    .lt("played_at", season.ends_at);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 const CHUNK = 200;
@@ -143,6 +158,12 @@ export async function syncSeasons(admin: SupabaseClient): Promise<{ added: numbe
     added += rows.length;
     // Progresso só muda enquanto a temporada não fecha
     if (seasonStatus(season, now) !== "closed") {
+      // Quem ficou sem partida aprovada no período (ex.: a única foi rejeitada) perde a linha
+      const keep = [...progress.keys()];
+      let stale = admin.from("season_progress").delete().eq("season_id", season.id);
+      if (keep.length) stale = stale.not("user_id", "in", `(${keep.join(",")})`);
+      const { error: staleError } = await stale;
+      if (staleError) throw staleError;
       const progressRows = [...progress.entries()].map(([userId, p]) => ({
         season_id: season.id,
         user_id: userId,
@@ -162,26 +183,23 @@ export async function syncSeasons(admin: SupabaseClient): Promise<{ added: numbe
 
 /**
  * Encerra as temporadas que passaram da data de fim: pódio, campeão, Coroa e
- * Lenda (gravados com a data de fim) e marca closed_at. Chame depois de
- * syncSeasons, para a Lenda ver todas as conquistas de partida.
+ * Lenda (gravados com a data de fim) e marca closed_at. Espera as partidas do
+ * período serem aprovadas (ou rejeitadas), até CLOSE_GRACE_DAYS depois do fim,
+ * para os prêmios saírem com o resultado final. Chame depois de syncSeasons,
+ * para a Lenda ver todas as conquistas de partida.
  */
 export async function closeDueSeasons(admin: SupabaseClient): Promise<Season[]> {
   const now = new Date();
-  const due = (await loadSeasons(admin)).filter((s) => seasonStatus(s, now) === "ended");
-  if (!due.length) return [];
+  const ended = (await loadSeasons(admin)).filter((s) => seasonStatus(s, now) === "ended");
+  if (!ended.length) return [];
   const visible = await visiblePlayers(admin);
   const closed: Season[] = [];
 
-  for (const season of due) {
-    // Marca primeiro: duas rotinas ao mesmo tempo não encerram a mesma temporada duas vezes
-    const { data: claimed } = await admin
-      .from("seasons")
-      .update({ closed_at: now.toISOString() })
-      .eq("id", season.id)
-      .is("closed_at", null)
-      .select("id");
-    if (!claimed?.length) continue;
+  for (const season of ended) {
+    if (now < closeDeadline(season) && (await pendingMatchesIn(admin, season)) > 0) continue;
 
+    // Prêmios antes de marcar closed_at: se algo falhar no meio, a próxima rodada
+    // tenta de novo (o upsert ignora o que já foi gravado)
     const { standings } = computeSeasonUnlocks(season, await seasonParts(admin, season), visible);
     const stored = await loadSeasonUnlocks(admin, season.id);
     const have = new Map<string, Set<string>>();
@@ -199,7 +217,33 @@ export async function closeDueSeasons(admin: SupabaseClient): Promise<Season[]> 
         .upsert(awards, { onConflict: "season_id,user_id,achievement_key", ignoreDuplicates: true });
       if (error) throw error;
     }
-    closed.push({ ...season, closed_at: now.toISOString() });
+
+    // Duas rotinas ao mesmo tempo: só uma marca (e publica a Gazeta)
+    const { data: claimed, error } = await admin
+      .from("seasons")
+      .update({ closed_at: now.toISOString() })
+      .eq("id", season.id)
+      .is("closed_at", null)
+      .select("id");
+    if (error) throw error;
+    if (claimed?.length) closed.push({ ...season, closed_at: now.toISOString() });
   }
   return closed;
+}
+
+/** Temporadas encerradas há pouco que ainda não têm a edição de encerramento da Gazeta. */
+export async function seasonsMissingNewspaper(admin: SupabaseClient): Promise<Season[]> {
+  const since = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const recent = (await loadSeasons(admin)).filter((s) => s.closed_at && new Date(s.closed_at).getTime() > since);
+  if (!recent.length) return [];
+  const { data, error } = await admin
+    .from("weekly_newspapers")
+    .select("season_id")
+    .in(
+      "season_id",
+      recent.map((s) => s.id),
+    );
+  if (error) throw error;
+  const done = new Set((data ?? []).map((r) => r.season_id as string));
+  return recent.filter((s) => !done.has(s.id));
 }
