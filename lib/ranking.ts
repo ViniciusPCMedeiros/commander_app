@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { commanderLabel, HIDDEN_PLAYER } from "@/lib/format";
-import type { DisplayTitle } from "@/lib/seasons";
+import type { DisplayTitle, SeasonBonus } from "@/lib/seasons";
 import { scoreMatch } from "@/lib/scoring";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
@@ -79,6 +79,8 @@ export interface PlayerRow extends Base {
   /** Partidas em que foi eliminado (não venceu). */
   deaths: number;
   selfDeaths: number;
+  /** Pontos extras da temporada (Regicídio e contratos), já somados em `points`. */
+  bonus: number;
 }
 
 export interface DeckRow extends Base {
@@ -142,8 +144,16 @@ const sessionDay = (iso: string) =>
     day: "2-digit",
   }).format(new Date(iso));
 
-/** `range`: período de uma temporada (substitui `period`). */
-export async function loadRanking(supabase: SupabaseClient, period: Period, range?: { start: Date; end: Date }) {
+/**
+ * `range`: período de uma temporada (substitui `period`). `bonuses`: pontos extras
+ * da temporada (Regicídio e contratos), somados só nos jogadores.
+ */
+export async function loadRanking(
+  supabase: SupabaseClient,
+  period: Period,
+  range?: { start: Date; end: Date },
+  bonuses: SeasonBonus[] = [],
+) {
   const start = range?.start ?? periodStart(period);
   const page = (from: number, to: number) => {
     let query = supabase
@@ -183,11 +193,15 @@ export async function loadRanking(supabase: SupabaseClient, period: Period, rang
   const before = lastSession ? rows.filter((p) => sessionDay(p.played_at) < lastSession) : [];
 
   return {
-    ...aggregate(rows, lookups),
+    ...aggregate(rows, lookups, bonuses),
     lastSession,
     lastSessionMatches: new Set(rows.filter((p) => sessionDay(p.played_at) === lastSession).map((p) => p.match_id))
       .size,
-    previous: aggregate(before, lookups),
+    previous: aggregate(
+      before,
+      lookups,
+      bonuses.filter((b) => lastSession && sessionDay(b.playedAt) < lastSession),
+    ),
   };
 }
 
@@ -207,7 +221,7 @@ type Lookups = {
   >;
 };
 
-function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups) {
+function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups, bonuses: SeasonBonus[] = []) {
   // Jogadores (participações já vêm em ordem cronológica → sequências)
   const players = new Map<string, PlayerRow>();
   for (const p of rows) {
@@ -234,6 +248,7 @@ function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups)
         bestStreak: 0,
         lastPlayed: p.played_at,
         title: u.display_title ?? null,
+        bonus: 0,
       } satisfies PlayerRow);
     const own = p.pilot_id === p.deck_owner_id;
     r.games++;
@@ -254,6 +269,14 @@ function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups)
     }
     r.lastPlayed = p.played_at;
     players.set(p.pilot_id, r);
+  }
+
+  // Extras da temporada: só para jogadores (decks e comandantes ficam com os pontos da mesa)
+  for (const b of bonuses) {
+    const r = players.get(b.playerId);
+    if (!r) continue;
+    r.points += b.points;
+    r.bonus += b.points;
   }
 
   // Decks

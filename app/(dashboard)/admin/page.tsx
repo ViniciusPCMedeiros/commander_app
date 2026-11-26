@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Bot, CalendarRange, Hourglass } from "lucide-react";
+import { Bot, CalendarRange, Hourglass, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -24,12 +24,14 @@ export default async function AdminPage() {
 
   // Service role: visão completa, incluindo último login vindo do Auth
   const admin = createAdminClient();
-  const [{ data: users }, { data: stats }, { data: authUsers }, { count: pending }] = await Promise.all([
-    admin.from("users").select("*").order("created_at").returns<UserProfile[]>(),
-    admin.from("player_stats").select("user_id, total_games, total_wins").returns<PlayerStats[]>(),
-    admin.auth.admin.listUsers({ perPage: 1000 }),
-    admin.from("matches").select("id", { count: "exact", head: true }).eq("status", "pending"),
-  ]);
+  const [{ data: users }, { data: stats }, { data: authUsers }, { count: pending }, { count: pendingClaims }] =
+    await Promise.all([
+      admin.from("users").select("*").order("created_at").returns<UserProfile[]>(),
+      admin.from("player_stats").select("user_id, total_games, total_wins").returns<PlayerStats[]>(),
+      admin.auth.admin.listUsers({ perPage: 1000 }),
+      admin.from("matches").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      admin.from("contract_claims").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    ]);
   const aiIssues = isRoot(profile.role) ? await loadAIIssues(admin) : null;
 
   // O root é invisível: só aparece para outro root
@@ -57,6 +59,11 @@ export default async function AdminPage() {
                 </Link>
               </Button>
             )}
+            <Button asChild variant="outline">
+              <Link href="/admin/contracts">
+                <ScrollText /> Contratos ({pendingClaims ?? 0})
+              </Link>
+            </Button>
             <Button asChild variant="outline">
               <Link href="/matches?tab=queue">
                 <Hourglass /> Fila de moderação ({pending ?? 0})

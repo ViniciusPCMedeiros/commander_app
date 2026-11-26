@@ -4,8 +4,8 @@ import { generateAICompletion } from "@/lib/ai";
 import { commanderLabel, formatDate, HIDDEN_PLAYER } from "@/lib/format";
 import { loadRanking, sortRows } from "@/lib/ranking";
 import { scoreMatch } from "@/lib/scoring";
-import { seasonLabel } from "@/lib/seasons";
-import { loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
+import { REGICIDE_POINTS, SEASON_LEADER_MIN_GAMES, seasonLabel } from "@/lib/seasons";
+import { loadSeasonBoard, loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { ACHIEVEMENT_BY_ID, isHighlight, loadAchievements, RARITY_LABEL } from "@/lib/achievements";
 import type { MatchWithParticipants } from "@/lib/types";
@@ -46,7 +46,15 @@ interface WeekSummary {
     others: number;
   };
   /** Temporada que estava valendo na semana (classificação até o fim da semana e conquistas da semana). */
-  season: { label: string; endsAt: string; top: { name: string; points: number }[]; unlocks: string[] } | null;
+  season: {
+    label: string;
+    endsAt: string;
+    top: { name: string; points: number }[];
+    unlocks: string[];
+    king: string | null;
+    regicides: string[];
+    contracts: string[];
+  } | null;
 }
 
 interface ScoredRow {
@@ -195,10 +203,13 @@ export async function buildWeekSummary(supabase: SupabaseClient, weekStart: Date
   let seasonInfo: WeekSummary["season"] = null;
   if (season) {
     const end = new Date(Math.min(new Date(season.ends_at).getTime(), weekEnd.getTime() + 1));
+    const board = await loadSeasonBoard(supabase, season, end);
     const [seasonRanking, seasonUnlocks] = await Promise.all([
-      loadRanking(supabase, "all", { start: new Date(season.starts_at), end }),
+      loadRanking(supabase, "all", { start: new Date(season.starts_at), end }, board.bonuses),
       loadSeasonUnlocks(supabase, season.id),
     ]);
+    const [leader] = board.standings;
+    const weekBonuses = board.bonuses.filter((b) => inWeek(b.playedAt) && nameOf(b.playerId));
     seasonInfo = {
       label: seasonLabel(season),
       endsAt: season.ends_at,
@@ -215,6 +226,11 @@ export async function buildWeekSummary(supabase: SupabaseClient, weekStart: Date
           return a ? `${nameOf(u.user_id)} — ${a.name}` : null;
         })
         .filter((x): x is string => Boolean(x)),
+      king: leader && leader[1].games >= SEASON_LEADER_MIN_GAMES ? (nameOf(leader[0]) ?? null) : null,
+      regicides: weekBonuses.filter((b) => b.kind === "regicidio").map((b) => nameOf(b.playerId)!),
+      contracts: weekBonuses
+        .filter((b) => b.kind === "contrato")
+        .map((b) => `${nameOf(b.playerId)} — ${b.label} (+${b.points})`),
     };
   }
 
@@ -304,6 +320,9 @@ function summaryToPrompt(s: WeekSummary): string {
           `TEMPORADA EM ANDAMENTO: ${s.season.label} (termina em ${formatDate(s.season.endsAt)}).`,
           `Classificação da temporada até agora: ${s.season.top.map((t, i) => `${i + 1}º ${t.name} (${t.points} pts)`).join(", ") || "sem partidas"}.`,
           `Conquistas de temporada liberadas na semana: ${s.season.unlocks.join("; ") || "nenhuma"}.`,
+          `Rei da Mesa (líder da temporada; quem o elimina ganha +${REGICIDE_POINTS} de Regicídio): ${s.season.king ?? "ninguém ainda"}.`,
+          `Regicídios na semana: ${s.season.regicides.join(", ") || "nenhum"}.`,
+          `Contratos semanais cumpridos (desafios valendo pontos na temporada): ${s.season.contracts.join("; ") || "nenhum"}.`,
         ]
       : []),
     "",
@@ -362,6 +381,9 @@ function fallbackNewspaper(s: WeekSummary): string {
           `#### 🗓️ Temporada ${s.season.label}`,
           ...s.season.top.map((t, i) => `- ${i + 1}º ${t.name}: ${t.points} pts`),
           ...(s.season.unlocks.length ? [`- Conquistas da semana: ${s.season.unlocks.join("; ")}`] : []),
+          ...(s.season.king ? [`- 👑 Rei da Mesa: ${s.season.king}`] : []),
+          ...(s.season.regicides.length ? [`- Regicídio: ${s.season.regicides.join(", ")}`] : []),
+          ...(s.season.contracts.length ? [`- Contratos cumpridos: ${s.season.contracts.join("; ")}`] : []),
         ]
       : []),
     ...(s.achievements.highlights.length

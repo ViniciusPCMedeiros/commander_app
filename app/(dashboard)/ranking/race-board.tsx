@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Flame, Play } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ColorPips } from "@/components/color-pips";
+import { KingBadge } from "@/components/king-badge";
 import { PlayerTitle } from "@/components/player-title";
 import { RankMovement, RankPosition } from "@/components/rank-badges";
 import type { DisplayTitle } from "@/lib/seasons";
@@ -27,6 +29,12 @@ export interface RaceRow {
   borrowedWins: number;
   borrowedGames: number;
   title: DisplayTitle | null;
+  /** Identidade de cor (cores acima de 50% das partidas). */
+  identity: { colors: string[]; name: string } | null;
+  /** Rei da Mesa: líder da temporada em andamento. */
+  king: boolean;
+  /** Pontos extras da temporada (Regicídio e contratos), já somados. */
+  bonus: number;
   /** Positivo = subiu; null = estreante. */
   delta: number | null;
   prevIndex: number | null;
@@ -123,6 +131,12 @@ export function RaceBoard({ rows, metric }: { rows: RaceRow[]; metric: "points" 
                     <Link href={`/players/${r.id}`} className="truncate text-base font-semibold hover:underline">
                       {r.name}
                     </Link>
+                    {r.identity && (
+                      <span title={`Identidade: ${r.identity.name}`} className="hidden shrink-0 self-center sm:inline">
+                        <ColorPips colors={r.identity.colors} className="text-xs" />
+                      </span>
+                    )}
+                    {r.king && <KingBadge compact className="self-center" />}
                     <PlayerTitle title={r.title} className="hidden sm:inline-flex" />
                   </div>
                   {/* Celular: resumo embaixo do nome (as colunas não cabem) */}
@@ -132,14 +146,24 @@ export function RaceBoard({ rows, metric }: { rows: RaceRow[]; metric: "points" 
                     <span className="text-rose-300">☠ {r.deaths}</span> · {r.games}J
                   </div>
                   <div className="flex min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
+                    {r.identity && (
+                      <span title={`Identidade: ${r.identity.name}`} className="shrink-0 sm:hidden">
+                        <ColorPips colors={r.identity.colors} />
+                      </span>
+                    )}
                     {r.currentStreak > 0 && (
                       <span className="flex shrink-0 items-center gap-1 text-orange-400">
                         <Flame className="size-3.5" />
                         {r.currentStreak} seguida(s)
                       </span>
                     )}
+                    {r.bonus > 0 && metric === "points" && (
+                      <span className="shrink-0 text-amber-300" title="Regicídio e contratos da temporada">
+                        {r.currentStreak > 0 && "· "}+{r.bonus} extras
+                      </span>
+                    )}
                     <span className="hidden truncate sm:inline">
-                      {r.currentStreak > 0 && "· "}próprios {r.ownWins}/{r.ownGames} · emprestados {r.borrowedWins}/
+                      {(r.currentStreak > 0 || (r.bonus > 0 && metric === "points")) && "· "}próprios {r.ownWins}/{r.ownGames} · emprestados {r.borrowedWins}/
                       {r.borrowedGames}
                     </span>
                   </div>

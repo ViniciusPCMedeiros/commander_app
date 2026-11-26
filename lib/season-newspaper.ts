@@ -6,7 +6,7 @@ import { splitHeadline } from "@/lib/newspaper";
 import { loadRanking, sortRows } from "@/lib/ranking";
 import { RARITY_LABEL } from "@/lib/achievements";
 import { seasonLabel, titleFor, type Season } from "@/lib/seasons";
-import { loadSeasonUnlocks } from "@/lib/seasons-data";
+import { loadSeasonBoard, loadSeasonUnlocks } from "@/lib/seasons-data";
 
 /**
  * Edição especial da Gazeta no encerramento de uma temporada: classificação
@@ -18,8 +18,9 @@ const SP_OFFSET_MS = 3 * 60 * 60 * 1000;
 const spDate = (iso: string) => new Date(new Date(iso).getTime() - SP_OFFSET_MS).toISOString().slice(0, 10);
 
 async function buildSeasonSummary(admin: SupabaseClient, season: Season) {
+  const board = await loadSeasonBoard(admin, season);
   const [ranking, unlocks, { data: users }] = await Promise.all([
-    loadRanking(admin, "all", { start: new Date(season.starts_at), end: new Date(season.ends_at) }),
+    loadRanking(admin, "all", { start: new Date(season.starts_at), end: new Date(season.ends_at) }, board.bonuses),
     loadSeasonUnlocks(admin, season.id),
     admin.from("users").select("id, name, role"),
   ]);
@@ -47,6 +48,17 @@ async function buildSeasonSummary(admin: SupabaseClient, season: Season) {
     lenda: holders("lenda"),
     achievements: season.achievements.map((a) => ({ ...a, holders: holders(a.key) })),
     perPlayer,
+    regicides: [
+      ...Map.groupBy(
+        board.bonuses.filter((b) => b.kind === "regicidio" && names.has(b.playerId)),
+        (b) => names.get(b.playerId)!,
+      ),
+    ]
+      .map(([n, list]) => [n, list.length] as const)
+      .sort((a, b) => b[1] - a[1]),
+    contracts: board.bonuses
+      .filter((b) => b.kind === "contrato" && names.has(b.playerId))
+      .map((b) => `${names.get(b.playerId)} — ${b.label} (+${b.points})`),
   };
 }
 
@@ -58,7 +70,7 @@ function summaryToPrompt(s: Summary): string {
     `TEMPORADA ${s.season.number}: ${t.name}${t.description ? ` — ${t.description}` : ""}`,
     `Período: ${formatDate(s.season.starts_at)} a ${formatDate(s.season.ends_at)}. Partidas aprovadas: ${s.matches}.`,
     "",
-    "CLASSIFICAÇÃO FINAL (vitória +4; abate de 0 a +2 conforme o tipo; morte por conta própria −1):",
+    "CLASSIFICAÇÃO FINAL (vitória +4; abate de 0 a +2 conforme o tipo; morte por conta própria −1; Regicídio +2; contratos +1 a +3):",
     ...s.standings.map(
       (p, i) =>
         `- ${i + 1}º ${p.name}: ${p.points} pts (${p.wins}V, ${p.kills} abates, ${p.deaths} mortes em ${p.games} partidas)`,
@@ -74,6 +86,8 @@ function summaryToPrompt(s: Summary): string {
     ),
     "",
     `Quem mais liberou conquistas: ${s.perPlayer.map((p) => `${p.name} (${p.count})`).join(", ") || "ninguém"}.`,
+    `Regicídios (eliminar o Rei da Mesa): ${s.regicides.map(([n, c]) => `${n} (${c})`).join(", ") || "nenhum"}.`,
+    `Contratos semanais cumpridos: ${s.contracts.join("; ") || "nenhum"}.`,
   ].join("\n");
 }
 

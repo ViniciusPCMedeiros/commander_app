@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarRange, Crown, Hourglass, Sparkles } from "lucide-react";
+import { CalendarRange, Crown, Hourglass, ScrollText, Sparkles } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RARITY_STYLE } from "@/components/achievement-badge";
 import { PageHeader } from "@/components/page-header";
+import { KingBadge } from "@/components/king-badge";
 import { PlayerTitle } from "@/components/player-title";
 import { SeasonAchievementIcon } from "@/components/season-badge";
 import { RARITY_LABEL } from "@/lib/achievements";
@@ -14,9 +15,20 @@ import { requireUser } from "@/lib/auth";
 import { formatDate, formatDateTime, initials } from "@/lib/format";
 import { loadRanking, sortRows } from "@/lib/ranking";
 import { isRoot } from "@/lib/roles";
-import { closeDeadline, seasonLabel, seasonStatus, themeColor, titleFor, type Season } from "@/lib/seasons";
-import { currentSeason, loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
+import {
+  closeDeadline,
+  REGICIDE_POINTS,
+  SEASON_LEADER_MIN_GAMES,
+  seasonLabel,
+  seasonStatus,
+  themeColor,
+  titleFor,
+  type Season,
+} from "@/lib/seasons";
+import { contractStatus, type ClaimStatus } from "@/lib/contracts";
+import { currentSeason, loadSeasonBoard, loadSeasonContracts, loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
 import { cn } from "@/lib/utils";
+import { ContractsBoard, type BoardContract } from "./contracts-board";
 
 export const metadata: Metadata = { title: "Temporada" };
 
@@ -107,20 +119,106 @@ export default async function SeasonsPage(props: PageProps<"/seasons">) {
 
   const status = seasonStatus(season);
   const color = themeColor(season.theme.color);
-  const [unlocks, { data: users }, { data: myProgress }, ranking] = await Promise.all([
+  const board = status === "upcoming" ? null : await loadSeasonBoard(supabase, season);
+  const [unlocks, { data: users }, { data: myProgress }, ranking, contracts, { data: myParts }] = await Promise.all([
     loadSeasonUnlocks(supabase, season.id),
     supabase.from("users").select("id, name, avatar_url, role"),
     supabase.from("season_progress").select("progress").eq("season_id", season.id).eq("user_id", profile.id).maybeSingle(),
-    status === "upcoming"
-      ? null
-      : loadRanking(supabase, "all", { start: new Date(season.starts_at), end: new Date(season.ends_at) }),
+    board
+      ? loadRanking(supabase, "all", { start: new Date(season.starts_at), end: new Date(season.ends_at) }, board.bonuses)
+      : null,
+    loadSeasonContracts(supabase, season.id),
+    // Partidas minhas na temporada (aprovadas ou pendentes), para reivindicar contratos
+    supabase
+      .from("match_participants")
+      .select("commander_snapshot, match:matches!inner ( id, status, played_at )")
+      .eq("pilot_id", profile.id)
+      .neq("match.status", "rejected")
+      .gte("match.played_at", season.starts_at)
+      .lt("match.played_at", season.ends_at)
+      .returns<{ commander_snapshot: string; match: { id: string; status: string; played_at: string } }[]>(),
   ]);
+  const { data: takers } = contracts.length
+    ? await supabase
+        .from("contract_takers")
+        .select("contract_id, user_id")
+        .in(
+          "contract_id",
+          contracts.map((c) => c.id),
+        )
+        .order("created_at")
+    : { data: [] };
+  const { data: claims } = contracts.length
+    ? await supabase
+        .from("contract_claims")
+        .select("id, contract_id, user_id, status, points, reject_reason, contract_votes ( voter_id )")
+        .in(
+          "contract_id",
+          contracts.map((c) => c.id),
+        )
+        .returns<
+          {
+            id: string;
+            contract_id: string;
+            user_id: string;
+            status: ClaimStatus;
+            points: number;
+            reject_reason: string | null;
+            contract_votes: { voter_id: string }[];
+          }[]
+        >()
+    : { data: [] };
   const players = new Map((users ?? []).filter((u) => u.role !== "root").map((u) => [u.id as string, u]));
   const visibleUnlocks = unlocks.filter((u) => players.has(u.user_id));
   const holders = (key: string) => visibleUnlocks.filter((u) => u.achievement_key === key);
   const mine = new Set(visibleUnlocks.filter((u) => u.user_id === profile.id).map((u) => u.achievement_key));
   const progress = (myProgress?.progress ?? {}) as Record<string, number>;
   const standings = ranking ? sortRows(ranking.players.filter((p) => players.has(p.id)), "points").slice(0, 5) : [];
+  const king =
+    status === "active" && board?.standings[0] && board.standings[0][1].games >= SEASON_LEADER_MIN_GAMES
+      ? board.standings[0][0]
+      : null;
+  const boardContracts: BoardContract[] = contracts.map((c) => {
+    const mine = (claims ?? []).filter((x) => x.contract_id === c.id && x.user_id === profile.id).at(-1);
+    const winnerClaim = (claims ?? []).find((x) => x.contract_id === c.id && x.status === "approved");
+    const winner = winnerClaim && players.has(winnerClaim.user_id) ? winnerClaim : undefined;
+    return {
+      id: c.id,
+      title: c.title,
+      description: c.description,
+      rarity: c.rarity,
+      reward: c.reward,
+      startsAt: c.starts_at,
+      endsAt: c.ends_at,
+      deadline: `até ${formatDateTime(new Date(new Date(c.ends_at).getTime() - 60_000))}`,
+      status: contractStatus(c, winner),
+      winner: winner
+        ? { userId: winner.user_id, name: players.get(winner.user_id)!.name as string, points: winner.points }
+        : null,
+      mine: mine
+        ? { id: mine.id, status: mine.status, votes: mine.contract_votes.length, rejectReason: mine.reject_reason }
+        : null,
+      claimedBy: (() => {
+        const other = (claims ?? []).find(
+          (x) => x.contract_id === c.id && x.status === "pending" && x.user_id !== profile.id && players.has(x.user_id),
+        );
+        return other ? { userId: other.user_id, name: players.get(other.user_id)!.name as string } : null;
+      })(),
+      takers: (takers ?? [])
+        .filter((t) => t.contract_id === c.id && players.has(t.user_id))
+        .map((t) => ({ userId: t.user_id as string, name: players.get(t.user_id)!.name as string })),
+      taken: (takers ?? []).some((t) => t.contract_id === c.id && t.user_id === profile.id),
+    };
+  });
+  const claimable = (myParts ?? [])
+    .map((p) => ({
+      id: p.match.id,
+      playedAt: new Date(p.match.played_at).toISOString(),
+      label: `${formatDateTime(p.match.played_at)} · ${p.commander_snapshot}${p.match.status === "pending" ? " (pendente)" : ""}`,
+    }))
+    .sort((a, b) => b.playedAt.localeCompare(a.playedAt));
+  const canClaim = !isRoot(profile.role) && (status === "active" || status === "ended");
+
   const required = season.achievements.filter((a) => a.required);
   const myRequired = required.filter((a) => mine.has(a.key)).length;
 
@@ -154,7 +252,27 @@ export default async function SeasonsPage(props: PageProps<"/seasons">) {
       </PageHeader>
 
       {/* Títulos em jogo */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={cn("grid gap-3 sm:grid-cols-2", status === "active" && "lg:grid-cols-3")}>
+        {status === "active" && (
+          <Card className="gap-2 border-amber-400/40 bg-amber-400/[0.06] px-4 py-4">
+            <div className="flex items-center gap-2 text-xs tracking-wider text-muted-foreground uppercase">
+              <Crown className="size-4 text-amber-300" /> Rei da Mesa
+            </div>
+            <div className="text-base font-semibold">
+              {king ? (
+                <Link href={`/players/${king}`} className="text-amber-200 hover:underline">
+                  {players.get(king)?.name}
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">Ainda sem Rei (3+ partidas na temporada)</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Em cada mesa, a coroa fica com o mais bem colocado presente. Quem eliminar o Rei ganha +{REGICIDE_POINTS}{" "}
+              (Regicídio), mesmo sem vencer.
+            </p>
+          </Card>
+        )}
         {titleBlocks.map(({ kind, icon: Icon, how }) => {
           const title = titleFor(season, kind);
           const owners = holders(kind);
@@ -185,6 +303,31 @@ export default async function SeasonsPage(props: PageProps<"/seasons">) {
         })}
       </div>
 
+      {/* Contratos semanais */}
+      {status !== "upcoming" && (
+        <Card id="contratos" className="scroll-mt-20 border-amber-400/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ScrollText className="size-5 text-amber-300" /> Contratos da semana
+            </CardTitle>
+            <CardDescription>
+              Desafios sorteados toda segunda. Pegue os que quiser tentar (vários podem pegar o mesmo); cumpriu numa
+              partida? Reivindique: vale com o “aprovo” de 2 admins ou do root, e só o primeiro leva os pontos (na
+              temporada). Os contratos mudam toda segunda: os que ninguém
+              cumpriu expiram.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ContractsBoard
+              contracts={boardContracts}
+              matches={claimable}
+              canClaim={canClaim}
+              viewerIsRoot={isRoot(profile.role)}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Classificação da temporada */}
         <Card className="lg:col-span-1">
@@ -207,8 +350,14 @@ export default async function SeasonsPage(props: PageProps<"/seasons">) {
                   {p.avatar_url && <AvatarImage src={p.avatar_url} alt="" />}
                   <AvatarFallback className="text-[10px]">{initials(p.name)}</AvatarFallback>
                 </Avatar>
-                <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                <span className="font-semibold text-primary tabular-nums">{p.points} pts</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 font-medium">
+                  <span className="truncate">{p.name}</span>
+                  {p.id === king && <KingBadge compact />}
+                </span>
+                <span className="text-right">
+                  <span className="block font-semibold text-primary tabular-nums">{p.points} pts</span>
+                  {p.bonus > 0 && <span className="block text-[10px] text-amber-300 tabular-nums">+{p.bonus} extras</span>}
+                </span>
               </Link>
             ))}
             {ranking && (
@@ -287,6 +436,7 @@ export default async function SeasonsPage(props: PageProps<"/seasons">) {
           </CardContent>
         </Card>
       </div>
+
     </div>
   );
 }

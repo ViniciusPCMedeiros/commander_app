@@ -2,9 +2,19 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import {
+  CONTRACT_REWARD,
+  WEEKLY_CONTRACTS,
+  type ContractTemplate,
+  type SeasonContract,
+} from "@/lib/contracts";
+import {
   closeDeadline,
   computeSeasonUnlocks,
   finalAwards,
+  SEASON_LEADER_MIN_GAMES,
+  seasonScoreboard,
+  spWeekStart,
+  type ApprovedClaim,
   seasonStatus,
   type Season,
   type SeasonPart,
@@ -64,7 +74,7 @@ export async function loadSeasonUnlocks(supabase: SupabaseClient, seasonId?: str
   });
 }
 
-async function seasonParts(supabase: SupabaseClient, season: Season): Promise<SeasonPart[]> {
+export async function seasonParts(supabase: SupabaseClient, season: Pick<Season, "starts_at" | "ends_at">): Promise<SeasonPart[]> {
   return fetchAll<SeasonPart>((from, to) =>
     supabase
       .from("approved_participations")
@@ -79,24 +89,72 @@ async function seasonParts(supabase: SupabaseClient, season: Season): Promise<Se
   );
 }
 
+/** Contratos aprovados da temporada (com o título, para os selos e a Gazeta). */
+export async function loadApprovedClaims(supabase: SupabaseClient, seasonId: string): Promise<ApprovedClaim[]> {
+  const rows = await fetchAll<{ match_id: string; user_id: string; points: number; contract: { title: string } }>(
+    (from, to) =>
+      supabase
+        .from("contract_claims")
+        .select("match_id, user_id, points, contract:season_contracts!inner ( title, season_id )")
+        .eq("status", "approved")
+        .eq("contract.season_id", seasonId)
+        .order("created_at")
+        .order("id")
+        .range(from, to)
+        .returns<{ match_id: string; user_id: string; points: number; contract: { title: string } }[]>(),
+  );
+  return rows.map((r) => ({ match_id: r.match_id, user_id: r.user_id, points: r.points, title: r.contract.title }));
+}
+
+/**
+ * Classificação da temporada com Rei da Mesa, Regicídio e contratos (ver
+ * seasonScoreboard). Serve para o ranking, a página da temporada e os selos.
+ */
+export async function loadSeasonBoard(supabase: SupabaseClient, season: Season, until?: Date) {
+  const endsAt = until && until < new Date(season.ends_at) ? until.toISOString() : season.ends_at;
+  const [parts, claims, visible] = await Promise.all([
+    seasonParts(supabase, { starts_at: season.starts_at, ends_at: endsAt }),
+    loadApprovedClaims(supabase, season.id),
+    visiblePlayers(supabase),
+  ]);
+  return seasonScoreboard(parts, claims, visible);
+}
+
+/** Rei da Mesa atual: o líder da temporada em andamento (com o mínimo de partidas). */
+export async function currentKing(supabase: SupabaseClient, seasons: Season[]) {
+  const season = seasons.find((s) => seasonStatus(s) === "active");
+  if (!season) return { season: null, board: null, king: null };
+  const board = await loadSeasonBoard(supabase, season);
+  const [first] = board.standings;
+  return { season, board, king: first && first[1].games >= SEASON_LEADER_MIN_GAMES ? first[0] : null };
+}
+
 /** Jogadores que podem ganhar conquistas (todos menos o root), com o nome para o desempate. */
-async function visiblePlayers(admin: SupabaseClient) {
+export async function visiblePlayers(admin: SupabaseClient) {
   const { data, error } = await admin.from("users").select("id, name, role");
   // Sem a lista, a temporada fecharia sem ninguém na classificação: melhor falhar e tentar de novo
   if (error || !data) throw new Error(`Falha ao carregar os jogadores: ${error?.message}`);
   return new Map(data.filter((u) => u.role !== "root").map((u) => [u.id as string, u.name as string]));
 }
 
-/** Partidas do período da temporada ainda esperando aprovação. */
+/** Partidas do período e reivindicações de contrato da temporada ainda esperando moderação. */
 export async function pendingMatchesIn(supabase: SupabaseClient, season: Season): Promise<number> {
-  const { count, error } = await supabase
-    .from("matches")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending")
-    .gte("played_at", season.starts_at)
-    .lt("played_at", season.ends_at);
-  if (error) throw error;
-  return count ?? 0;
+  const [matches, claims] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .gte("played_at", season.starts_at)
+      .lt("played_at", season.ends_at),
+    supabase
+      .from("contract_claims")
+      .select("id, contract:season_contracts!inner ( season_id )", { count: "exact", head: true })
+      .eq("status", "pending")
+      .eq("contract.season_id", season.id),
+  ]);
+  if (matches.error) throw matches.error;
+  if (claims.error) throw claims.error;
+  return (matches.count ?? 0) + (claims.count ?? 0);
 }
 
 const CHUNK = 200;
@@ -139,7 +197,12 @@ export async function syncSeasons(admin: SupabaseClient): Promise<{ added: numbe
   const have = new Set(stored.map((r) => `${r.season_id}:${r.user_id}:${r.achievement_key}`));
   let added = 0;
   for (const season of seasons) {
-    const { unlocks, progress } = computeSeasonUnlocks(season, await seasonParts(admin, season), visible);
+    const { unlocks, progress } = computeSeasonUnlocks(
+      season,
+      await seasonParts(admin, season),
+      visible,
+      await loadApprovedClaims(admin, season.id),
+    );
     const rows = unlocks
       .filter((u) => !have.has(`${season.id}:${u.playerId}:${u.key}`))
       .map((u) => ({
@@ -200,7 +263,12 @@ export async function closeDueSeasons(admin: SupabaseClient): Promise<Season[]> 
 
     // Prêmios antes de marcar closed_at: se algo falhar no meio, a próxima rodada
     // tenta de novo (o upsert ignora o que já foi gravado)
-    const { standings } = computeSeasonUnlocks(season, await seasonParts(admin, season), visible);
+    const { standings } = computeSeasonUnlocks(
+      season,
+      await seasonParts(admin, season),
+      visible,
+      await loadApprovedClaims(admin, season.id),
+    );
     const stored = await loadSeasonUnlocks(admin, season.id);
     const have = new Map<string, Set<string>>();
     for (const r of stored) have.set(r.user_id, new Set([...(have.get(r.user_id) ?? []), r.achievement_key]));
@@ -246,4 +314,114 @@ export async function seasonsMissingNewspaper(admin: SupabaseClient): Promise<Se
   if (error) throw error;
   const done = new Set((data ?? []).map((r) => r.season_id as string));
   return recent.filter((s) => !done.has(s.id));
+}
+
+// ------------------------------------------------------------------ Contratos
+
+export async function loadContractTemplates(supabase: SupabaseClient): Promise<ContractTemplate[]> {
+  const { data } = await supabase.from("contract_templates").select("id, title, description, rarity, active").order("created_at");
+  return (data ?? []) as ContractTemplate[];
+}
+
+export async function loadSeasonContracts(supabase: SupabaseClient, seasonId: string): Promise<SeasonContract[]> {
+  const { data } = await supabase
+    .from("season_contracts")
+    .select("id, season_id, template_id, title, description, rarity, reward, starts_at, ends_at")
+    .eq("season_id", seasonId)
+    .order("starts_at", { ascending: false })
+    .order("created_at");
+  return (data ?? []) as SeasonContract[];
+}
+
+/**
+ * Sorteia `n` modelos ativos e abre os contratos da semana. Evita repetir os que
+ * já estão em jogo e os da semana anterior (se o catálogo permitir).
+ */
+export async function drawContracts(admin: SupabaseClient, season: Season, n: number, at = new Date()) {
+  const [templates, current] = await Promise.all([loadContractTemplates(admin), loadSeasonContracts(admin, season.id)]);
+  const { start } = spWeekStart(at);
+  const lastWeek = new Date(start.getTime() - WEEK_MS);
+  const recent = new Set(current.filter((c) => new Date(c.ends_at) > lastWeek).map((c) => c.template_id));
+  const active = templates.filter((t) => t.active);
+  const fresh = active.filter((t) => !recent.has(t.id));
+  const shuffle = <T,>(list: T[]) => {
+    // Fisher–Yates
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+  };
+  // Primeiro os inéditos; se faltar, completa com os outros
+  const picked = [...shuffle(fresh), ...shuffle(active.filter((t) => recent.has(t.id)))].slice(0, n);
+  const startsAt = new Date(Math.max(start.getTime(), new Date(season.starts_at).getTime()));
+  const endsAt = new Date(Math.min(start.getTime() + WEEK_MS, new Date(season.ends_at).getTime()));
+  const rows = picked.map((t) => ({
+    season_id: season.id,
+    template_id: t.id,
+    title: t.title,
+    description: t.description,
+    rarity: t.rarity,
+    reward: CONTRACT_REWARD[t.rarity],
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+  }));
+  if (!rows.length) return 0;
+  const { error } = await admin.from("season_contracts").insert(rows);
+  if (error) throw error;
+  return rows.length;
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Rotina dos contratos (a cada rodada do agendador; só age uma vez por semana):
+ * sorteia os contratos da semana enquanto a temporada está em andamento. Os da
+ * semana anterior que ninguém cumpriu expiram sozinhos (o prazo era a semana).
+ */
+export async function runContractWeek(admin: SupabaseClient, now = new Date()) {
+  const seasons = (await loadSeasons(admin)).filter((s) => seasonStatus(s, now) === "active");
+  let drawn = 0;
+  for (const season of seasons) {
+    const { day } = spWeekStart(now);
+    const { error: lockError } = await admin.from("contract_draws").insert({ season_id: season.id, week_start: day });
+    if (lockError) {
+      if (lockError.code === "23505") continue; // já sorteado nesta semana
+      throw lockError;
+    }
+    try {
+      drawn += await drawContracts(admin, season, WEEKLY_CONTRACTS, now);
+    } catch (error) {
+      // Libera a trava para a próxima rodada tentar de novo
+      await admin.from("contract_draws").delete().eq("season_id", season.id).eq("week_start", day);
+      throw error;
+    }
+  }
+  return { drawn };
+}
+
+/** Contratos em aberto agora (temporada em andamento, no prazo e sem dono), para o Painel. */
+export async function loadOpenContracts(supabase: SupabaseClient, now = new Date()) {
+  const season = (await loadSeasons(supabase)).find((s) => seasonStatus(s, now) === "active");
+  if (!season) return { season: null, contracts: [] as (SeasonContract & { takers: string[]; inReview: boolean })[] };
+  const contracts = (await loadSeasonContracts(supabase, season.id)).filter((c) => new Date(c.ends_at) > now);
+  if (!contracts.length) return { season, contracts: [] };
+  const ids = contracts.map((c) => c.id);
+  const [{ data: winners }, { data: takers }] = await Promise.all([
+    supabase.from("contract_claims").select("contract_id, status").neq("status", "rejected").in("contract_id", ids),
+    supabase.from("contract_takers").select("contract_id, user_id").in("contract_id", ids).order("created_at"),
+  ]);
+  const claimed = new Set((winners ?? []).filter((w) => w.status === "approved").map((w) => w.contract_id as string));
+  const inReview = new Set((winners ?? []).filter((w) => w.status === "pending").map((w) => w.contract_id as string));
+  return {
+    season,
+    contracts: contracts
+      .filter((c) => !claimed.has(c.id))
+      .map((c) => ({
+        ...c,
+        inReview: inReview.has(c.id),
+        takers: (takers ?? []).filter((t) => t.contract_id === c.id).map((t) => t.user_id as string),
+      }))
+      .sort((a, b) => b.reward - a.reward || a.ends_at.localeCompare(b.ends_at)),
+  };
 }

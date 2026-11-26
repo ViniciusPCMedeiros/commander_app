@@ -8,10 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { RankMovement, RankPosition } from "@/components/rank-badges";
+import { KingBadge } from "@/components/king-badge";
+import { identitiesByPlayer } from "@/lib/color-profile";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { PlayerTitle } from "@/components/player-title";
 import { requireUser } from "@/lib/auth";
-import { seasonLabel, seasonStatus } from "@/lib/seasons";
-import { loadSeasons } from "@/lib/seasons-data";
+import { REGICIDE_POINTS, seasonLabel, seasonStatus } from "@/lib/seasons";
+import { CONTRACT_REWARD } from "@/lib/contracts";
+import { currentKing, loadSeasonBoard, loadSeasons } from "@/lib/seasons-data";
 import { formatDate, formatDay, formatPct, initials } from "@/lib/format";
 import {
   loadRanking,
@@ -85,10 +89,24 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
   // ?season=N: ranking só com as partidas daquela temporada
   const seasons = await loadSeasons(supabase);
   const season = seasons.find((x) => x.number === Number(sp.season)) ?? null;
+  // Rei da Mesa (líder da temporada em andamento) e, na temporada, os pontos extras
+  const [reign, identities] = await Promise.all([
+    currentKing(supabase, seasons),
+    // Identidade de cor de cada jogador (todas as partidas, igual ao perfil)
+    fetchAll<{ pilot_id: string; color_identity_snapshot: string[] | null; is_winner: boolean }>((from, to) =>
+      supabase
+        .from("approved_participations")
+        .select("pilot_id, color_identity_snapshot, is_winner")
+        .order("id")
+        .range(from, to),
+    ).then(identitiesByPlayer),
+  ]);
+  const board = season ? (season.id === reign.season?.id ? reign.board : await loadSeasonBoard(supabase, season)) : null;
   const data = await loadRanking(
     supabase,
     period,
     season ? { start: new Date(season.starts_at), end: new Date(season.ends_at) } : undefined,
+    board?.bonuses,
   );
 
   const players = sortRows(data.players, sort);
@@ -213,7 +231,28 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
             </div>
           ))}
         </div>
+        {season && (
+          <div className="grid gap-x-8 gap-y-1 pb-1 sm:grid-cols-2">
+            {[
+              { label: "Regicídio: eliminar o Rei da Mesa", who: "quem eliminou", points: `+${REGICIDE_POINTS}` },
+              {
+                label: "Contrato semanal cumprido",
+                who: "o primeiro aprovado",
+                points: `+${CONTRACT_REWARD.common} a +${CONTRACT_REWARD.mythic}`,
+              },
+            ].map((r) => (
+              <div key={r.label} className="flex items-center justify-between gap-3 border-b border-border/40 py-1">
+                <span>
+                  {r.label} <span className="text-xs text-muted-foreground">({r.who})</span>
+                </span>
+                <span className="font-semibold text-amber-300 tabular-nums">{r.points}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <p className="pt-2 pb-1 text-xs text-muted-foreground">
+          {season &&
+            "Só na temporada: o Rei da Mesa é o mais bem colocado da mesa (com 3+ partidas na temporada); contratos valem só na semana em que saíram. "}
           ⚔ abates · ☠ mortes (partidas em que foi eliminado). Abate é de quem foi marcado em “eliminado por”. Conceder ou “Outro” não tira pontos. Empate em pontos: mais
           vitórias, depois mais abates.
         </p>
@@ -248,7 +287,15 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                       {p.avatar_url && <AvatarImage src={p.avatar_url} alt="" />}
                       <AvatarFallback>{initials(p.name)}</AvatarFallback>
                     </Avatar>
-                    <div className="max-w-full truncate font-semibold">{p.name}</div>
+                    <div className="flex max-w-full items-center gap-1.5 font-semibold">
+                      <span className="truncate">{p.name}</span>
+                      {identities.get(p.id) && (
+                        <span title={`Identidade: ${identities.get(p.id)!.name}`} className="shrink-0">
+                          <ColorPips colors={identities.get(p.id)!.colors} className="text-xs" />
+                        </span>
+                      )}
+                      {p.id === reign.king && <KingBadge compact />}
+                    </div>
                     <PlayerTitle title={p.title} className="max-w-full" />
                     <div className="text-xs text-muted-foreground tabular-nums">
                       {sort === "points" && <span className="font-semibold text-foreground">{p.points} pts · </span>}
@@ -296,6 +343,9 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                   winrate: p.winrate,
                   currentStreak: p.currentStreak,
                   title: p.title,
+                  king: p.id === reign.king,
+                  identity: identities.get(p.id) ?? null,
+                  bonus: p.bonus,
                   ownWins: p.ownWins,
                   ownGames: p.ownGames,
                   borrowedWins: p.borrowedWins,

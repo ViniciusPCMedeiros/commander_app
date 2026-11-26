@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import type { Rarity } from "@/lib/achievements";
 import { ELIMINATION_REASONS } from "@/lib/elimination";
-import { scoreMatch } from "@/lib/scoring";
+import { isKill, scoreMatch } from "@/lib/scoring";
 
 /**
  * Temporadas: o root lança cada uma com um tema e datas. Cada temporada tem a
@@ -624,6 +624,12 @@ const spWeek = (iso: string) => {
   return d.toISOString().slice(0, 10);
 };
 
+/** Início da semana (segunda 00:00 em Brasília) do instante dado: data e instante. */
+export function spWeekStart(at: Date): { day: string; start: Date } {
+  const day = spWeek(at.toISOString());
+  return { day, start: new Date(`${day}T00:00:00-03:00`) };
+}
+
 export interface SeasonUnlock {
   key: string;
   playerId: string;
@@ -631,41 +637,126 @@ export interface SeasonUnlock {
   at: string;
 }
 
-type Totals = { points: number; wins: number; kills: number; games: number };
+export type Totals = { points: number; wins: number; kills: number; games: number };
 const byNumbers = (a: Totals, b: Totals) =>
   b.points - a.points || b.wins - a.wins || b.kills - a.kills || b.games - a.games;
 
 /** Partidas mínimas na temporada para alguém contar como líder (antes disso, ninguém é). */
 export const SEASON_LEADER_MIN_GAMES = 3;
 
+/** Pontos de Regicídio: eliminar o Rei da Mesa (vale mesmo sem vencer a partida). */
+export const REGICIDE_POINTS = 2;
+
+/** Pontos extras da temporada (fora da partida em si). */
+export interface SeasonBonus {
+  kind: "regicidio" | "contrato";
+  playerId: string;
+  matchId: string;
+  playedAt: string;
+  points: number;
+  /** Contrato: título. */
+  label?: string;
+}
+
+/** Reivindicação de contrato aprovada (só conta se a partida estiver aprovada e no período). */
+export interface ApprovedClaim {
+  match_id: string;
+  user_id: string;
+  points: number;
+  title: string;
+}
+
+/**
+ * Classificação da temporada partida a partida, com os pontos extras:
+ *  - Rei da Mesa de cada partida: o mais bem colocado da mesa, com pelo menos
+ *    SEASON_LEADER_MIN_GAMES partidas (se o líder geral não estiver, a coroa passa
+ *    para o melhor presente). Quem eliminar o Rei ganha REGICIDE_POINTS.
+ *  - Contratos aprovados: os pontos entram depois da partida em que foram cumpridos.
+ * `visible`: quem pode pontuar/ser Rei (todos menos o root), com o nome — o
+ * desempate final é pelo nome, igual ao ranking (sortRows).
+ */
+export function seasonScoreboard(parts: SeasonPart[], claims: ApprovedClaim[], visible: Map<string, string>) {
+  const totals = new Map<string, Totals>();
+  const byStanding = (a: [string, Totals], b: [string, Totals]) =>
+    byNumbers(a[1], b[1]) || (visible.get(a[0]) ?? "").localeCompare(visible.get(b[0]) ?? "");
+  const ranked = () => [...totals.entries()].filter(([id]) => visible.has(id)).sort(byStanding);
+  const claimsByMatch = Map.groupBy(claims, (c) => c.match_id);
+  const kings = new Map<string, string>();
+  /** Líder sozinho na frente antes de cada partida (para "eliminar o líder"). */
+  const leaders = new Map<string, string | null>();
+  const bonuses: SeasonBonus[] = [];
+  const add = (id: string, patch: Partial<Totals>) => {
+    const t = totals.get(id) ?? { points: 0, wins: 0, kills: 0, games: 0 };
+    t.points += patch.points ?? 0;
+    t.wins += patch.wins ?? 0;
+    t.kills += patch.kills ?? 0;
+    t.games += patch.games ?? 0;
+    totals.set(id, t);
+  };
+
+  const tables = [...Map.groupBy(parts, (p) => p.match_id).values()].sort(
+    (a, b) => a[0].played_at.localeCompare(b[0].played_at) || a[0].match_id.localeCompare(b[0].match_id),
+  );
+  for (const table of tables) {
+    const matchId = table[0].match_id;
+    const playedAt = table[0].played_at;
+    const order = ranked();
+    const [first, second] = order;
+    leaders.set(
+      matchId,
+      first && first[1].games >= SEASON_LEADER_MIN_GAMES && !(second && byNumbers(first[1], second[1]) === 0)
+        ? first[0]
+        : null,
+    );
+    const atTable = new Set(table.map((p) => p.pilot_id));
+    const king = order.find(([id, t]) => atTable.has(id) && t.games >= SEASON_LEADER_MIN_GAMES)?.[0];
+    if (king) {
+      kings.set(matchId, king);
+      const fallen = table.find((p) => p.pilot_id === king);
+      const killer = fallen && !fallen.is_winner && isKill(fallen.elimination_reason) ? fallen.eliminated_by : null;
+      if (killer && killer !== king && visible.has(killer) && atTable.has(killer)) {
+        bonuses.push({ kind: "regicidio", playerId: killer, matchId, playedAt, points: REGICIDE_POINTS });
+        add(killer, { points: REGICIDE_POINTS });
+      }
+    }
+    const scores = scoreMatch(table);
+    for (const p of table) {
+      const sc = scores.get(p.pilot_id)!;
+      add(p.pilot_id, { points: sc.points, kills: sc.kills, games: 1, wins: p.is_winner ? 1 : 0 });
+    }
+    for (const c of claimsByMatch.get(matchId) ?? []) {
+      if (!atTable.has(c.user_id) || !visible.has(c.user_id)) continue;
+      bonuses.push({ kind: "contrato", playerId: c.user_id, matchId, playedAt, points: c.points, label: c.title });
+      add(c.user_id, { points: c.points });
+    }
+  }
+  return { standings: ranked(), kings, leaders, bonuses };
+}
+
 /**
  * Conquistas de partida de uma temporada (sem pódio/campeão/títulos, que saem no
  * encerramento). `parts`: participações aprovadas dentro do período, de todos.
- * `visible`: quem pode ganhar (todos menos o root), com o nome — o desempate final
- * da classificação é pelo nome, igual ao ranking (sortRows).
+ * `claims`: contratos aprovados (entram na classificação, que decide Coroa e pódio).
  */
-export function computeSeasonUnlocks(season: Season, parts: SeasonPart[], visible: Map<string, string>) {
-  const byStanding = (a: [string, Totals], b: [string, Totals]) =>
-    byNumbers(a[1], b[1]) || (visible.get(a[0]) ?? "").localeCompare(visible.get(b[0]) ?? "");
-  /** Líder sozinho na frente (empate nos números = sem líder), com o mínimo de partidas. */
-  const soleLeader = () => {
-    const [first, second] = [...totals.entries()].filter(([id]) => visible.has(id)).sort(byStanding);
-    if (!first || first[1].games < SEASON_LEADER_MIN_GAMES) return null;
-    return second && byNumbers(first[1], second[1]) === 0 ? null : first[0];
-  };
+export function computeSeasonUnlocks(
+  season: Season,
+  parts: SeasonPart[],
+  visible: Map<string, string>,
+  claims: ApprovedClaim[] = [],
+) {
   const states = new Map<string, State>();
   const state = (id: string) => states.get(id) ?? (states.set(id, newState()), states.get(id)!);
   const unlocks: SeasonUnlock[] = [];
   const done = new Set<string>();
   const counters = season.achievements.filter((a) => !TEMPLATE_BY_ID.get(a.template)?.final);
-  const totals = new Map<string, Totals>();
+  const board = seasonScoreboard(parts, claims, visible);
 
   const tables = [...Map.groupBy(parts, (p) => p.match_id).values()].sort(
     (a, b) => a[0].played_at.localeCompare(b[0].played_at) || a[0].match_id.localeCompare(b[0].match_id),
   );
   for (const table of tables) {
     const scores = scoreMatch(table);
-    const leader = soleLeader();
+    const leader = board.leaders.get(table[0].match_id) ?? null;
 
     for (const p of table) {
       const s = state(p.pilot_id);
@@ -718,15 +809,6 @@ export function computeSeasonUnlocks(season: Season, parts: SeasonPart[], visibl
       }
     }
 
-    for (const p of table) {
-      const t = totals.get(p.pilot_id) ?? { points: 0, wins: 0, kills: 0, games: 0 };
-      const sc = scores.get(p.pilot_id)!;
-      t.points += sc.points;
-      t.kills += sc.kills;
-      t.games++;
-      if (p.is_winner) t.wins++;
-      totals.set(p.pilot_id, t);
-    }
   }
 
   const progress = new Map(
@@ -734,8 +816,7 @@ export function computeSeasonUnlocks(season: Season, parts: SeasonPart[], visibl
       .filter(([id]) => visible.has(id))
       .map(([id, s]) => [id, Object.fromEntries(counters.map((a) => [a.key, Math.min(metric(a, s), a.target)]))]),
   );
-  const standings = [...totals.entries()].filter(([id]) => visible.has(id)).sort(byStanding);
-  return { unlocks, progress, standings };
+  return { unlocks, progress, standings: board.standings };
 }
 
 /**

@@ -8,10 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { Score } from "@/components/duel-ui";
+import { ColorProfileCard } from "@/components/color-profile-card";
+import { KingBadge } from "@/components/king-badge";
 import { PlayerTitle } from "@/components/player-title";
 import { SeasonAchievementIcon } from "@/components/season-badge";
 import { seasonLabel, themeColor, titleFor } from "@/lib/seasons";
-import { loadSeasons } from "@/lib/seasons-data";
+import { colorProfile } from "@/lib/color-profile";
+import { currentKing, loadSeasons } from "@/lib/seasons-data";
 import { TitlePicker } from "./title-picker";
 import { AchievementIcon, RARITY_STYLE } from "@/components/achievement-badge";
 import { ACHIEVEMENT_BY_ID, ACHIEVEMENTS, loadAchievements, RARITY_LABEL } from "@/lib/achievements";
@@ -224,7 +227,10 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
     .map((a) => ({ def: a, value: Math.min(myProgress?.get(a.id) ?? 0, a.target ?? 1) }))
     .sort((a, b) => (b.def.target ? b.value / b.def.target : 0) - (a.def.target ? a.value / a.def.target : 0));
   const hiddenSecrets = ACHIEVEMENTS.filter((a) => a.secret && !have.has(a.id)).length;
-  const matchUnlocks = await loadMatchChips(supabase, { achievements, seasons });
+  const [matchUnlocks, reign] = await Promise.all([
+    loadMatchChips(supabase, { achievements, seasons }),
+    currentKing(supabase, seasons),
+  ]);
 
   // Temporadas: conquistas de cada uma e os títulos (Lenda/Coroa) que o jogador tem
   const seasonRows = [...seasons]
@@ -250,7 +256,10 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
             </Avatar>
             <span className="flex flex-col gap-1">
               {player.name}
-              <PlayerTitle title={player.display_title} className="font-sans text-sm" />
+              <span className="flex flex-wrap items-center gap-2">
+                {reign.king === player.id && <KingBadge className="font-sans" />}
+                <PlayerTitle title={player.display_title} className="font-sans text-sm" />
+              </span>
             </span>
             {player.role !== "member" && <Badge variant="secondary">{ROLE_LABEL[player.role]}</Badge>}
           </span>
@@ -305,6 +314,8 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
           aiEnabled={isAIConfigured()}
           canGenerate={isRoot(profile.role)}
         />
+
+        <ColorProfileCard name={player.name} {...colorProfile(participations)} />
 
         <Card>
           <CardHeader>

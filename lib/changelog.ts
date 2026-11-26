@@ -16,6 +16,33 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.5.0",
+    date: "2026-12-11T20:00:00-03:00",
+    title: "Contratos e Rei da Mesa",
+    changes: [
+      {
+        kind: "novo",
+        text: "Contratos semanais: toda segunda saem desafios novos na página Temporada (ex.: causar 100 de dano numa partida). Pegue os que quiser tentar (vários podem pegar o mesmo) e, quando cumprir, reivindique na partida: vale com o “aprovo” de 2 admins ou do root, e só o primeiro leva os pontos — comum +1, raro +2, mítico +3. Os contratos mudam toda semana: os que ninguém cumpriu expiram.",
+      },
+      {
+        kind: "novo",
+        text: "Rei da Mesa: o líder da temporada ganha a coroa no perfil e no ranking. Em cada mesa, ela fica com o mais bem colocado presente, e quem eliminar o Rei ganha +2 (Regicídio), mesmo sem vencer.",
+      },
+      {
+        kind: "novo",
+        text: "Regicídio e contratos contam só no ranking da temporada (e decidem a Coroa e o pódio); o ranking geral continua só com as partidas. O card da partida mostra quem era o Rei, o Regicídio e os contratos cumpridos.",
+      },
+      {
+        kind: "novo",
+        text: "Perfil: card de Cores mostra em quantas partidas cada cor estava no deck, e as cores acima de 50% formam a identidade do jogador (ex.: Simic, Jund, Cinco cores; Incolor quando os decks sem cor passam de 50% e nenhuma cor passa). A identidade também aparece ao lado do nome no ranking.",
+      },
+      {
+        kind: "novo",
+        text: "Admin → Contratos: fila de reivindicações para aprovar ou recusar (ninguém aprova a própria) e, para o root, o catálogo de desafios e os contratos em jogo.",
+      },
+    ],
+  },
+  {
     version: "1.4.0",
     date: "2026-12-04T20:00:00-03:00",
     title: "Temporadas",

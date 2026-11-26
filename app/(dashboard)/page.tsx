@@ -8,6 +8,9 @@ import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { MatchCard } from "@/components/match-card";
 import { loadMatchChips } from "@/lib/match-chips";
+import { WeeklyContracts } from "@/components/weekly-contracts";
+import { seasonLabel } from "@/lib/seasons";
+import { loadOpenContracts } from "@/lib/seasons-data";
 import { isAIConfigured } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { commanderLabel, formatPct, initials } from "@/lib/format";
@@ -21,6 +24,7 @@ export default async function DashboardPage() {
   const { supabase, profile } = await requireUser();
   // Conquistas liberadas em cada partida (selinhos no card)
   const achievementsLoad = loadMatchChips(supabase);
+  const contractsLoad = loadOpenContracts(supabase);
 
   const [players, decks, approvedCount, pendingCount, activeDecks, newspaper, recent] = await Promise.all([
     supabase.from("player_stats").select("*").returns<PlayerStats[]>(),
@@ -62,7 +66,7 @@ export default async function DashboardPage() {
     { label: "Aguardando moderação", value: pendingCount.count ?? 0, icon: Hourglass, href: "/matches?tab=queue" },
   ];
 
-  const matchUnlocks = await achievementsLoad;
+  const [matchUnlocks, openContracts] = await Promise.all([achievementsLoad, contractsLoad]);
   return (
     <div className="space-y-6">
       <PageHeader
@@ -196,6 +200,13 @@ export default async function DashboardPage() {
         </div>
 
         <div className="min-w-0 space-y-6 lg:col-span-2">
+          {openContracts.season && (
+            <WeeklyContracts
+              contracts={openContracts.contracts}
+              seasonLabel={`temporada ${seasonLabel(openContracts.season)}`}
+              viewerId={profile.id}
+            />
+          )}
           <NewspaperCard newspaper={newspaper.data ?? null} aiEnabled={isAIConfigured()} />
           <div className="space-y-3">
             <div className="flex items-center justify-between">

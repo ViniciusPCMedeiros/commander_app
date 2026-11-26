@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { syncAchievements } from "@/lib/achievement-sync";
 import { refreshWeeklyInsights } from "@/lib/insights";
 import { publishSeasonNewspaper } from "@/lib/season-newspaper";
-import { closeDueSeasons, seasonsMissingNewspaper } from "@/lib/seasons-data";
+import { closeDueSeasons, runContractWeek, seasonsMissingNewspaper } from "@/lib/seasons-data";
 import { publishWeeklyNewspaper } from "@/lib/newspaper";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
   const result: {
     achievements?: unknown;
     seasons?: number[];
+    contracts?: { drawn: number };
     newspaper?: unknown;
     insights?: string[];
     error?: string;
@@ -31,6 +32,13 @@ export async function POST(request: NextRequest) {
   try {
     // Antes da Gazeta, para ela já ver as conquistas da semana
     result.achievements = await syncAchievements(admin);
+    // Contratos: sorteio da semana (os da semana anterior sem dono expiram)
+    const contracts = await runContractWeek(admin);
+    if (contracts.drawn) {
+      result.contracts = contracts;
+      console.log(`Contratos: ${contracts.drawn} sorteado(s) para a semana.`);
+      revalidatePath("/seasons");
+    }
     // Temporadas vencidas (sem partidas pendentes do período): pódio, campeão, Coroa e Lenda
     const closed = await closeDueSeasons(admin);
     if (closed.length) {
