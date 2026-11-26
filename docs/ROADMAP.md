@@ -153,12 +153,40 @@ root invisível) está correto; typecheck e lint passam.
 
 ## v2.0.0 — Liga Anual 2027, "Modo Brasileirão" (mar/2027)
 
-- [ ] Mesas travadas em 4 jogadores
-- [ ] Pareamento balanceado para 11 inscritos, em 1º e 2º turnos
-- [ ] Ordem dos assentos (1–4)
-- [ ] Tabela com K/W/D (abates, vitórias, mortes) e corrida pelo G-4
-- A definir: convivência com as temporadas, o Rei da Mesa e os contratos; partidas
-  da liga contam também no ranking geral?
+Já existe no app: assento (`seat_order`) e quem eliminou quem (`eliminated_by`) em cada
+partida, o que basta para V/K/D sem mudar o cadastro de partidas.
+
+### Decidido (26/11/2026)
+
+- **Mesas travadas em 4** e **rodadas sem data**: no início do ano o app gera as
+  primeiras mesas ("mesões"); quando todas são jogadas e **confirmadas por um admin**,
+  saem as próximas. 1º e 2º turnos.
+- **Pareamento balanceado** para 11 inscritos: equilibrar quem enfrenta quem, quem
+  descansa na rodada e a ordem dos assentos (1–4).
+- **Pontuação estilo Brasileirão**: vitória = 3 pontos; o resto desempata.
+- **Tabela**: J, V, K (abates), D (mortes), saldo (K−D), Pts; corrida pelo **G-4**.
+- **Grande Final** em dezembro: o G-4 joga a mesa que decide quem é campeão; título e
+  selo no perfil.
+
+### A definir
+
+- [ ] Quantas partidas da liga por pessoa em cada turno (fica para depois)
+- [ ] Rodada com 11 inscritos: 2 mesas de 4 e 3 descansam (em rodízio)? Ou mesas
+      liberadas uma a uma, sem esperar a rodada inteira?
+- [ ] Mesa que não acontece trava a rodada: o root pode trocar alguém, remarcar ou
+      anular a mesa?
+- [ ] Empate (ninguém vence): vale 1 ponto para quem sobreviveu? Morte por conta
+      própria conta como D?
+- [ ] Desempate: vitórias, saldo, abates, confronto direto — nessa ordem?
+- [ ] Grande Final: uma mesa só ou melhor de 3? O 1º da tabela tem alguma vantagem
+      (escolher assento)?
+- [ ] Gerar a rodada sozinho ou o root clica em "Gerar próxima rodada"?
+- [ ] Inscrições: abertas pelo root em fevereiro; quem sai no meio do ano?
+- [ ] Convivência com as temporadas. Proposta: a partida da liga é uma partida
+      normal marcada como "Liga" e conta também no ranking geral e na temporada;
+      Rei da Mesa, Regicídio e contratos seguem só na temporada.
+- [ ] Cadastro: ao registrar, escolher "Mesa da Liga" já preenche as 4 pessoas e os
+      assentos.
 
 ## Futuro (sem data)
 
