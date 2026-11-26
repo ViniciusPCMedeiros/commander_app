@@ -43,6 +43,7 @@ export default async function RivalriesPage(props: PageProps<"/rivalries">) {
   return (
     <div className="space-y-6">
       <PageHeader
+        banner="rivalidades"
         eyebrow="Confrontos"
         title="Rivalidades"
         description="Quem vence quem e quem elimina quem, contando só as mesas em que os dois estavam juntos."
