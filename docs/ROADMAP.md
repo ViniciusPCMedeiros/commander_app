@@ -114,20 +114,61 @@ root invisível) está correto; typecheck e lint passam.
 - [ ] Apagar do banco local a temporada de teste e os dados de contratos
 - [ ] Ajustar a data provisória (11/12/2026) no changelog no dia do deploy
 
-## v1.6.0 — Gráficos (planejado)
+## v1.6.0 — Rifa Mensal de Boosters (meados/fim de jan/2027)
 
-- [ ] Gráficos de análise (evolução de pontos, desempenho por deck/cor etc.) — escopo a
-  definir
+- [ ] Urna ao vivo: 1 bilhete por partida aprovada no mês
+- [ ] Sorteio auditável no `/admin`
+- A definir: o root participa? (hoje ele é invisível e nunca pontua); partida recusada
+  depois do sorteio; bilhetes por mês do calendário (fuso de São Paulo)
 
-## Futuro
+## v1.6.x — Gráficos de análise (em alguma versão da 1.6)
+
+- [ ] Gráficos de análise: evolução de pontos, desempenho por deck/cor etc.
+- A definir: quais gráficos, onde aparecem (perfil, ranking, temporada) e a biblioteca
+
+## v1.7.0 — Simulador Suíço 1v1 (fim de jan / início de fev/2027)
+
+- [ ] Página `/draft` isolada (não mexe no ranking, temporadas nem conquistas)
+- [ ] Para Drafts e o Pré-Release do Caos
+- [ ] 3 rodadas para 6 ativos, ou 4 rodadas para 11 inscritos
+- A definir: bye com número ímpar, desempates (OMW%, GW%), melhor de 1 ou de 3
+
+## Migração para a nuvem (fev/2027)
+
+- [ ] Sair da VPN: Vercel + Supabase Cloud (Free) + Gemini API
+- [ ] Gemini: 1 RPC + 1 chamada JSON para o Jornal e as análises de perfil
+- [ ] Bloquear cadastro público
+- [ ] Conferir o RLS de todas as tabelas (com o app público, ele vira a defesa principal)
+- [ ] GitHub Actions: keep-alive (o Supabase Free pausa sem uso) e backup do banco
+- Cuidados conhecidos:
+  - O agendador atual (`instrumentation.ts`, a cada 5 min) não roda na Vercel
+    (serverless). A rotina `/api/cron/weekly` (conquistas, temporadas, contratos,
+    Gazeta) precisa de outro gatilho: Vercel Cron (no plano grátis, 1x/dia) ou o
+    GitHub Actions chamando a rota.
+  - Migrar os dados do banco atual (usuários do Auth, partidas, decks, conquistas,
+    temporadas) e as imagens de `public/banners`.
+  - Nesse ponto já dá para usar HTTPS e trocar todos os segredos.
+- Coincide com a temporada **Nauctis**: evitar migrar no meio de um encerramento de
+  temporada.
+
+## v2.0.0 — Liga Anual 2027, "Modo Brasileirão" (mar/2027)
+
+- [ ] Mesas travadas em 4 jogadores
+- [ ] Pareamento balanceado para 11 inscritos, em 1º e 2º turnos
+- [ ] Ordem dos assentos (1–4)
+- [ ] Tabela com K/W/D (abates, vitórias, mortes) e corrida pelo G-4
+- A definir: convivência com as temporadas, o Rei da Mesa e os contratos; partidas
+  da liga contam também no ranking geral?
+
+## Futuro (sem data)
 
 - [ ] Temporada temática **Nauctis** (fevereiro/2027): definir mecânicas, conquistas
   temáticas e arte
 - [ ] Upload da arte do tema pelo Admin (hoje é um arquivo em `public/banners`)
-- [ ] Backups automáticos do banco (`pg_dump`)
+- [ ] Backups automáticos do banco (`pg_dump`) — ou via GitHub Actions na migração
 - [ ] Script de deploy em um comando
 - [ ] Validar nomes de cartas no "Colar lista"
 - [ ] Avisos de legalidade de Commander
 - [ ] Lembrete no domingo para aprovar partidas pendentes
 - [ ] CI e testes automatizados
-- [ ] Trocar a senha de acesso ao servidor
+- [ ] Trocar a senha de acesso ao servidor (enquanto estiver na VPN)
