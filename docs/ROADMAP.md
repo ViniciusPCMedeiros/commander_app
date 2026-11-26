@@ -161,6 +161,10 @@ partida, o que basta para V/K/D sem mudar o cadastro de partidas.
 - **Mesas travadas em 4** e **rodadas sem data**: no início do ano o app gera as
   primeiras mesas ("mesões"); quando todas são jogadas e **confirmadas por um admin**,
   saem as próximas. 1º e 2º turnos.
+- **Inscrição com deck fixo**: antes de a liga começar, quem quer participar marca
+  interesse e escolhe o deck da liga. As mesas iniciais são geradas com esses decks, e
+  ao registrar uma partida da liga o deck já vem preenchido.
+- **Tudo automático**: o próprio app gera as rodadas seguintes, sem botão do root.
 - **Pareamento balanceado** para 11 inscritos: equilibrar quem enfrenta quem, quem
   descansa na rodada e a ordem dos assentos (1–4).
 - **Pontuação estilo Brasileirão**: vitória = 3 pontos; o resto desempata.
@@ -171,22 +175,23 @@ partida, o que basta para V/K/D sem mudar o cadastro de partidas.
 ### A definir
 
 - [ ] Quantas partidas da liga por pessoa em cada turno (fica para depois)
-- [ ] Rodada com 11 inscritos: 2 mesas de 4 e 3 descansam (em rodízio)? Ou mesas
-      liberadas uma a uma, sem esperar a rodada inteira?
-- [ ] Mesa que não acontece trava a rodada: o root pode trocar alguém, remarcar ou
-      anular a mesa?
+- [ ] Rodada com 11 inscritos: proposta de 2 mesas de 4, com 3 descansando em rodízio
+- [ ] Mesa parada: proposta de, após N dias (ex.: 14), o app gerar a próxima rodada
+      sozinho, mantendo a mesa antiga aberta para ser jogada depois
 - [ ] Empate (ninguém vence): vale 1 ponto para quem sobreviveu? Morte por conta
       própria conta como D?
 - [ ] Desempate: vitórias, saldo, abates, confronto direto — nessa ordem?
 - [ ] Grande Final: uma mesa só ou melhor de 3? O 1º da tabela tem alguma vantagem
       (escolher assento)?
-- [ ] Gerar a rodada sozinho ou o root clica em "Gerar próxima rodada"?
-- [ ] Inscrições: abertas pelo root em fevereiro; quem sai no meio do ano?
+- [ ] Inscrições: período (ex.: fevereiro) e quem sai no meio do ano
+- [ ] Deck fixo: vale o ano todo ou pode trocar entre o 1º e o 2º turno? Pode mexer
+      nas cartas (mantendo o comandante)? Vale deck emprestado (com permissão do dono)?
+- [ ] Mínimo de inscritos para a liga começar (e o que fazer com mais de 11)
 - [ ] Convivência com as temporadas. Proposta: a partida da liga é uma partida
       normal marcada como "Liga" e conta também no ranking geral e na temporada;
       Rei da Mesa, Regicídio e contratos seguem só na temporada.
-- [ ] Cadastro: ao registrar, escolher "Mesa da Liga" já preenche as 4 pessoas e os
-      assentos.
+- [ ] Cadastro: ao registrar, escolher "Mesa da Liga" já preenche as 4 pessoas, os
+      decks da inscrição e os assentos.
 
 ## Futuro (sem data)
 
