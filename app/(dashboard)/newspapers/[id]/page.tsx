@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { MatchCard } from "@/components/match-card";
-import { loadAchievements, unlocksByMatch } from "@/lib/achievements";
+import { loadMatchChips } from "@/lib/match-chips";
 import { Markdown } from "@/components/markdown";
 import { WhatsAppShareButton } from "@/components/whatsapp-share-button";
 import { requireUser } from "@/lib/auth";
@@ -28,7 +28,7 @@ export default async function NewspaperPage(props: PageProps<"/newspapers/[id]">
   const { id } = await props.params;
   const { supabase } = await requireUser();
   // Conquistas liberadas em cada partida (selinhos no card)
-  const achievementsLoad = loadAchievements(supabase);
+  const achievementsLoad = loadMatchChips(supabase);
 
   const { data: paper } = await supabase.from("weekly_newspapers").select("*").eq("id", id).maybeSingle<WeeklyNewspaper>();
   if (!paper) notFound();
@@ -74,7 +74,7 @@ export default async function NewspaperPage(props: PageProps<"/newspapers/[id]">
     .map((name) => ({ name, wins: wins.find(([n]) => n === name)?.[1] ?? 0, games: games.get(name)! }))
     .sort((a, b) => b.wins - a.wins || b.games - a.games || a.name.localeCompare(b.name));
 
-  const matchUnlocks = unlocksByMatch(await achievementsLoad);
+  const matchUnlocks = await achievementsLoad;
   return (
     <div className="space-y-6">
       <PageHeader

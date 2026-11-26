@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { MilestoneItem, MilestoneList } from "@/components/milestone-item";
 import { loadAchievements } from "@/lib/achievements";
+import { seasonStatus } from "@/lib/seasons";
+import { loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
 import { requireUser } from "@/lib/auth";
 import { formatMonth } from "@/lib/format";
 import { milestoneEvents, type MilestoneEvent } from "@/lib/milestones";
@@ -12,12 +14,35 @@ export const metadata: Metadata = { title: "Histórico" };
 
 export default async function HistoryPage() {
   const { supabase } = await requireUser();
-  const [{ data }, achievements] = await Promise.all([
+  const [{ data }, achievements, seasons, seasonUnlocks, { data: users }] = await Promise.all([
     supabase.from("player_milestones").select("*").returns<PlayerMilestones[]>(),
     loadAchievements(supabase),
+    loadSeasons(supabase),
+    loadSeasonUnlocks(supabase),
+    supabase.from("users").select("id, name, role"),
   ]);
   const rows = data ?? [];
-  const events = milestoneEvents(rows, { releases: true, achievements });
+  // Temporadas já iniciadas, com quem levou a Coroa e a Lenda (o root não aparece)
+  const nameOf = new Map((users ?? []).filter((u) => u.role !== "root").map((u) => [u.id as string, u.name as string]));
+  const owners = (seasonId: string, key: string) =>
+    seasonUnlocks
+      .filter((u) => u.season_id === seasonId && u.achievement_key === key && nameOf.has(u.user_id))
+      .map((u) => ({ id: u.user_id, name: nameOf.get(u.user_id)! }));
+  const events = milestoneEvents(rows, {
+    releases: true,
+    achievements,
+    seasons: seasons
+      .filter((s) => seasonStatus(s) !== "upcoming")
+      .map((s) => ({
+        number: s.number,
+        name: s.theme.name,
+        color: s.theme.color,
+        startsAt: s.starts_at,
+        closedAt: s.closed_at,
+        coroa: owners(s.id, "coroa"),
+        lenda: owners(s.id, "lenda"),
+      })),
+  });
 
   // Agrupa por mês (eventos já vêm do mais recente ao mais antigo)
   const months: { label: string; events: MilestoneEvent[] }[] = [];
@@ -74,7 +99,7 @@ export default async function HistoryPage() {
             <CardContent>
               <MilestoneList>
                 {m.events.map((e) => (
-                  <MilestoneItem key={`${e.kind}-${e.userId}-${e.release?.version ?? e.achievementId ?? ""}`} event={e} />
+                  <MilestoneItem key={`${e.kind}-${e.userId}-${e.release?.version ?? e.achievementId ?? `${e.season?.number}-${e.season?.phase}`}`} event={e} />
                 ))}
               </MilestoneList>
             </CardContent>

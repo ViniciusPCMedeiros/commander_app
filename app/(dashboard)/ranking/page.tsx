@@ -8,8 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { RankMovement, RankPosition } from "@/components/rank-badges";
+import { PlayerTitle } from "@/components/player-title";
 import { requireUser } from "@/lib/auth";
-import { formatDay, formatPct, initials } from "@/lib/format";
+import { seasonLabel, seasonStatus } from "@/lib/seasons";
+import { loadSeasons } from "@/lib/seasons-data";
+import { formatDate, formatDay, formatPct, initials } from "@/lib/format";
 import {
   loadRanking,
   MIN_GAMES_FOR_WINRATE,
@@ -79,7 +82,14 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
   const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "players";
 
   const { supabase } = await requireUser();
-  const data = await loadRanking(supabase, period);
+  // ?season=N: ranking só com as partidas daquela temporada
+  const seasons = await loadSeasons(supabase);
+  const season = seasons.find((x) => x.number === Number(sp.season)) ?? null;
+  const data = await loadRanking(
+    supabase,
+    period,
+    season ? { start: new Date(season.starts_at), end: new Date(season.ends_at) } : undefined,
+  );
 
   const players = sortRows(data.players, sort);
   const decks = sortRows(data.decks, sort);
@@ -91,8 +101,11 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
   const deckMoves = movements(decks, sortRows(data.previous.decks, sort), (r) => r.id);
   const commanderMoves = movements(commanders, sortRows(data.previous.commanders, sort), (r) => r.name);
 
-  const href = (patch: Partial<{ period: Period; sort: SortKey; tab: Tab }>) => {
-    const q = new URLSearchParams({ period, sort, tab, ...patch });
+  const href = (patch: Partial<{ period: Period; sort: SortKey; tab: Tab; season: number | null }>) => {
+    const target = patch.season === undefined ? season?.number : patch.season;
+    const q = new URLSearchParams({ period, sort, tab, ...patch, season: "" });
+    if (target) q.set("season", String(target));
+    else q.delete("season");
     return `/ranking?${q.toString()}`;
   };
 
@@ -106,7 +119,11 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
           banner="ranking"
           eyebrow="Classificação"
           title="Ranking"
-          description={`${data.matches} partida(s) aprovada(s) · ${PERIOD_LABEL[period].toLowerCase()}`}
+          description={`${data.matches} partida(s) aprovada(s) · ${
+            season
+              ? `temporada ${seasonLabel(season)} (${formatDate(season.starts_at)} a ${formatDate(season.ends_at)})`
+              : PERIOD_LABEL[period].toLowerCase()
+          }`}
           actions={
             <div className="flex flex-wrap gap-2">
               {[
@@ -147,11 +164,22 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex flex-wrap gap-1.5">
             {PERIODS.map((p) => (
-              <Chip key={p} href={href({ period: p })} active={p === period}>
+              <Chip key={p} href={href({ period: p, season: null })} active={!season && p === period}>
                 {PERIOD_LABEL[p]}
               </Chip>
             ))}
           </div>
+          {seasons.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Temporadas</span>
+              {[...seasons].reverse().map((x) => (
+                <Chip key={x.number} href={href({ season: x.number })} active={season?.number === x.number}>
+                  {seasonLabel(x)}
+                  {seasonStatus(x) === "active" && " •"}
+                </Chip>
+              ))}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted-foreground">Ordenar por</span>
             {SORTS.map((s) => (
@@ -221,6 +249,7 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                       <AvatarFallback>{initials(p.name)}</AvatarFallback>
                     </Avatar>
                     <div className="max-w-full truncate font-semibold">{p.name}</div>
+                    <PlayerTitle title={p.title} className="max-w-full" />
                     <div className="text-xs text-muted-foreground tabular-nums">
                       {sort === "points" && <span className="font-semibold text-foreground">{p.points} pts · </span>}
                       {p.wins}V / {p.games}J · {formatPct(p.winrate)}
@@ -266,6 +295,7 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                   deaths: p.deaths,
                   winrate: p.winrate,
                   currentStreak: p.currentStreak,
+                  title: p.title,
                   ownWins: p.ownWins,
                   ownGames: p.ownGames,
                   borrowedWins: p.borrowedWins,

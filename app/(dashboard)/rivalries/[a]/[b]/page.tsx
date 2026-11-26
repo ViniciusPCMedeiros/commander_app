@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeftRight, Skull, Swords } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MatchCard } from "@/components/match-card";
-import { loadAchievements, unlocksByMatch } from "@/lib/achievements";
+import { loadMatchChips } from "@/lib/match-chips";
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
@@ -25,7 +25,7 @@ export default async function DuelPage(props: PageProps<"/rivalries/[a]/[b]">) {
 
   const { supabase } = await requireUser();
   // Conquistas liberadas em cada partida (selinhos no card)
-  const achievementsLoad = loadAchievements(supabase);
+  const achievementsLoad = loadMatchChips(supabase);
   const r = await loadRivalries(supabase);
   const pa = r.players.find((p) => p.id === a);
   const pb = r.players.find((p) => p.id === b);
@@ -54,7 +54,7 @@ export default async function DuelPage(props: PageProps<"/rivalries/[a]/[b]">) {
       ]
     : [];
 
-  const matchUnlocks = unlocksByMatch(await achievementsLoad);
+  const matchUnlocks = await achievementsLoad;
   return (
     <div className="space-y-6">
       <PageHeader

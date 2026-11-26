@@ -2,7 +2,7 @@ import { ACHIEVEMENT_BY_ID, isHighlight, type Achievements } from "@/lib/achieve
 import { CHANGELOG } from "@/lib/changelog";
 import type { PlayerMilestones } from "@/lib/types";
 
-export type MilestoneKind = "joined" | "first_match" | "first_win" | "release" | "achievement";
+export type MilestoneKind = "joined" | "first_match" | "first_win" | "release" | "achievement" | "season";
 
 export interface MilestoneEvent {
   kind: MilestoneKind;
@@ -19,6 +19,17 @@ export interface MilestoneEvent {
   wonFirst?: boolean;
   /** Conquista liberada (kind "achievement"): id em lib/achievements.ts. */
   achievementId?: string;
+  /** Início ou fim de temporada (kind "season"). */
+  season?: SeasonMilestone;
+}
+
+export interface SeasonMilestone {
+  number: number;
+  name: string;
+  color: string;
+  phase: "start" | "end";
+  coroa: { id: string; name: string }[];
+  lenda: { id: string; name: string }[];
 }
 
 /**
@@ -28,7 +39,16 @@ export interface MilestoneEvent {
  */
 export function milestoneEvents(
   rows: PlayerMilestones[],
-  { releases = false, achievements }: { releases?: boolean; achievements?: Achievements } = {},
+  {
+    releases = false,
+    achievements,
+    seasons,
+  }: {
+    releases?: boolean;
+    achievements?: Achievements;
+    /** Temporadas iniciadas (com os donos da Coroa e da Lenda, se encerradas). */
+    seasons?: (Omit<SeasonMilestone, "phase"> & { startsAt: string; closedAt: string | null })[];
+  } = {},
 ): MilestoneEvent[] {
   const events: MilestoneEvent[] = [];
   for (const r of rows) {
@@ -73,10 +93,28 @@ export function milestoneEvents(
     const nameOf = new Map(achievements.players.map((p) => [p.id, p.name]));
     for (const u of achievements.unlocks) {
       if (!isHighlight(ACHIEVEMENT_BY_ID.get(u.id)!)) continue;
-      events.push({ kind: "achievement", at: u.at, userId: u.playerId, name: nameOf.get(u.playerId) ?? "?", achievementId: u.id });
+      events.push({
+        kind: "achievement",
+        at: u.at,
+        userId: u.playerId,
+        name: nameOf.get(u.playerId) ?? "?",
+        achievementId: u.id,
+      });
     }
   }
+  for (const s of seasons ?? []) {
+    const base = { userId: "", name: "", season: { ...s, phase: "start" as const } };
+    events.push({ kind: "season", at: s.startsAt, ...base });
+    if (s.closedAt) events.push({ kind: "season", at: s.closedAt, ...base, season: { ...s, phase: "end" } });
+  }
   // Mais recente primeiro; no empate, "entrou" antes de "jogou" antes de "venceu" (lido de baixo para cima)
-  const order: Record<MilestoneKind, number> = { release: 0, joined: 1, first_match: 2, first_win: 3, achievement: 4 };
+  const order: Record<MilestoneKind, number> = {
+    release: 0,
+    season: 0,
+    joined: 1,
+    first_match: 2,
+    first_win: 3,
+    achievement: 4,
+  };
   return events.sort((a, b) => b.at.localeCompare(a.at) || order[b.kind] - order[a.kind]);
 }

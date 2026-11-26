@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Bot, Hourglass } from "lucide-react";
+import { Bot, CalendarRange, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -49,11 +49,20 @@ export default async function AdminPage() {
             : "Admin: cria membros e promove membros a admin. Demais mudanças de papel são feitas pelo root."
         }
         actions={
-          <Button asChild variant="outline">
-            <Link href="/matches?tab=queue">
-              <Hourglass /> Fila de moderação ({pending ?? 0})
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {isRoot(profile.role) && (
+              <Button asChild>
+                <Link href="/admin/seasons">
+                  <CalendarRange /> Temporadas
+                </Link>
+              </Button>
+            )}
+            <Button asChild variant="outline">
+              <Link href="/matches?tab=queue">
+                <Hourglass /> Fila de moderação ({pending ?? 0})
+              </Link>
+            </Button>
+          </div>
         }
       />
 

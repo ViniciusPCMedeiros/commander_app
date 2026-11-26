@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Award, Crosshair, Skull, Swords } from "lucide-react";
+import { Award, CalendarRange, Crosshair, Skull, Swords } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { Score } from "@/components/duel-ui";
+import { PlayerTitle } from "@/components/player-title";
+import { SeasonAchievementIcon } from "@/components/season-badge";
+import { seasonLabel, themeColor, titleFor } from "@/lib/seasons";
+import { loadSeasons } from "@/lib/seasons-data";
+import { TitlePicker } from "./title-picker";
 import { AchievementIcon, RARITY_STYLE } from "@/components/achievement-badge";
-import { ACHIEVEMENT_BY_ID, ACHIEVEMENTS, loadAchievements, RARITY_LABEL, unlocksByMatch } from "@/lib/achievements";
+import { ACHIEVEMENT_BY_ID, ACHIEVEMENTS, loadAchievements, RARITY_LABEL } from "@/lib/achievements";
+import { loadMatchChips } from "@/lib/match-chips";
 import { MatchCard } from "@/components/match-card";
 import { isAIConfigured } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
@@ -56,6 +62,8 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
     killed,
     rivalries,
     achievements,
+    seasons,
+    seasonUnlocks,
   ] = await Promise.all([
     supabase.from("player_stats").select("*").eq("user_id", id).single<PlayerStats>(),
     supabase
@@ -106,6 +114,16 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
     ),
     loadRivalries(supabase),
     loadAchievements(supabase),
+    loadSeasons(supabase),
+    fetchAll<{ season_id: string; achievement_key: string; unlocked_at: string }>((from, to) =>
+      supabase
+        .from("season_unlocks")
+        .select("season_id, achievement_key, unlocked_at")
+        .eq("user_id", id)
+        .order("unlocked_at")
+        .order("achievement_key")
+        .range(from, to),
+    ),
   ]);
   // Linha do tempo em ordem cronológica (entrou → primeira partida → primeira vitória)
   const timeline = milestones ? milestoneEvents([milestones]).reverse() : [];
@@ -206,7 +224,19 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
     .map((a) => ({ def: a, value: Math.min(myProgress?.get(a.id) ?? 0, a.target ?? 1) }))
     .sort((a, b) => (b.def.target ? b.value / b.def.target : 0) - (a.def.target ? a.value / a.def.target : 0));
   const hiddenSecrets = ACHIEVEMENTS.filter((a) => a.secret && !have.has(a.id)).length;
-  const matchUnlocks = unlocksByMatch(achievements);
+  const matchUnlocks = await loadMatchChips(supabase);
+
+  // Temporadas: conquistas de cada uma e os títulos (Lenda/Coroa) que o jogador tem
+  const seasonRows = [...seasons]
+    .reverse()
+    .map((season) => {
+      const keys = new Set(seasonUnlocks.filter((u) => u.season_id === season.id).map((u) => u.achievement_key));
+      return { season, keys, unlocked: season.achievements.filter((a) => keys.has(a.key)) };
+    })
+    .filter((r) => r.keys.size > 0);
+  const ownedTitles = seasonRows.flatMap(({ season, keys }) =>
+    (["lenda", "coroa"] as const).filter((k) => keys.has(k)).map((k) => titleFor(season, k)),
+  );
 
   return (
     <div className="space-y-6">
@@ -218,7 +248,10 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
               {player.avatar_url && <AvatarImage src={player.avatar_url} alt={player.name} />}
               <AvatarFallback className="font-sans text-lg">{initials(player.name)}</AvatarFallback>
             </Avatar>
-            {player.name}
+            <span className="flex flex-col gap-1">
+              {player.name}
+              <PlayerTitle title={player.display_title} className="font-sans text-sm" />
+            </span>
             {player.role !== "member" && <Badge variant="secondary">{ROLE_LABEL[player.role]}</Badge>}
           </span>
         }
@@ -517,6 +550,62 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
             )}
           </CardContent>
         </Card>
+
+        {seasonRows.length > 0 && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarRange className="size-5" /> Temporadas
+              </CardTitle>
+              <CardDescription>
+                Conquistas e títulos de cada temporada.{" "}
+                <Link href="/seasons" className="underline">
+                  Ver a temporada
+                </Link>
+                .
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {ownedTitles.length > 0 && (
+                <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <div className="text-sm font-semibold">Títulos</div>
+                  {profile.id === id ? (
+                    <TitlePicker titles={ownedTitles} current={player.display_title?.key ?? null} />
+                  ) : (
+                    ownedTitles.map((t) => <PlayerTitle key={t.key} title={t} className="flex text-sm" />)
+                  )}
+                </div>
+              )}
+              {seasonRows.map(({ season, unlocked }) => (
+                <div key={season.id} className="space-y-2">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <Link
+                      href={`/seasons?t=${season.number}`}
+                      className={cn("font-semibold hover:underline", themeColor(season.theme.color).text)}
+                    >
+                      {seasonLabel(season)}
+                    </Link>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {unlocked.length} de {season.achievements.length}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {unlocked.map((a) => (
+                      <span
+                        key={a.key}
+                        title={a.description}
+                        className="inline-flex items-center gap-1.5 rounded-full border bg-background/40 py-0.5 pr-2.5 pl-0.5 text-xs"
+                      >
+                        <SeasonAchievementIcon achievement={a} className="size-6 ring-1" />
+                        {a.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="space-y-3">

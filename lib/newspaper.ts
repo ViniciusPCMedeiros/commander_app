@@ -2,7 +2,10 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateAICompletion } from "@/lib/ai";
 import { commanderLabel, formatDate, HIDDEN_PLAYER } from "@/lib/format";
+import { loadRanking, sortRows } from "@/lib/ranking";
 import { scoreMatch } from "@/lib/scoring";
+import { seasonLabel } from "@/lib/seasons";
+import { loadSeasons, loadSeasonUnlocks } from "@/lib/seasons-data";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { ACHIEVEMENT_BY_ID, isHighlight, loadAchievements, RARITY_LABEL } from "@/lib/achievements";
 import type { MatchWithParticipants } from "@/lib/types";
@@ -11,7 +14,7 @@ export const MATCH_SELECT = `
   *,
   match_participants (
     *,
-    pilot:users!match_participants_pilot_id_fkey ( name ),
+    pilot:users!match_participants_pilot_id_fkey ( name, display_title ),
     owner:users!match_participants_deck_owner_id_fkey ( name ),
     deck:decks ( name, commander_image_url )
   )
@@ -38,7 +41,12 @@ interface WeekSummary {
   /** Sequências de vitórias em andamento (2+). */
   streaks: [string, number][];
   /** Conquistas raras, míticas e secretas liberadas na semana; `others`: quantas comuns/incomuns. */
-  achievements: { highlights: { player: string; name: string; rarity: string; description: string | null }[]; others: number };
+  achievements: {
+    highlights: { player: string; name: string; rarity: string; description: string | null }[];
+    others: number;
+  };
+  /** Temporada que estava valendo na semana (classificação até o fim da semana e conquistas da semana). */
+  season: { label: string; endsAt: string; top: { name: string; points: number }[]; unlocks: string[] } | null;
 }
 
 interface ScoredRow {
@@ -181,9 +189,39 @@ export async function buildWeekSummary(supabase: SupabaseClient, weekStart: Date
       description: a.secret ? null : a.description,
     }));
 
+  // Temporada que cobre a semana
+  const seasons = await loadSeasons(supabase);
+  const season = seasons.find((x) => new Date(x.starts_at) <= weekEnd && new Date(x.ends_at) > weekStart);
+  let seasonInfo: WeekSummary["season"] = null;
+  if (season) {
+    const end = new Date(Math.min(new Date(season.ends_at).getTime(), weekEnd.getTime() + 1));
+    const [seasonRanking, seasonUnlocks] = await Promise.all([
+      loadRanking(supabase, "all", { start: new Date(season.starts_at), end }),
+      loadSeasonUnlocks(supabase, season.id),
+    ]);
+    seasonInfo = {
+      label: seasonLabel(season),
+      endsAt: season.ends_at,
+      top: sortRows(
+        seasonRanking.players.filter((p) => nameOf(p.id)),
+        "points",
+      )
+        .slice(0, 3)
+        .map((p) => ({ name: p.name, points: p.points })),
+      unlocks: seasonUnlocks
+        .filter((u) => inWeek(u.unlocked_at) && nameOf(u.user_id))
+        .map((u) => {
+          const a = season.achievements.find((x) => x.key === u.achievement_key);
+          return a ? `${nameOf(u.user_id)} — ${a.name}` : null;
+        })
+        .filter((x): x is string => Boolean(x)),
+    };
+  }
+
   return {
     weekStart,
     weekEnd,
+    season: seasonInfo,
     achievements: { highlights, others: weekUnlocks.length - highlights.length },
     matches,
     winsByPlayer: countBy(winners, (p) => p.pilot?.name ?? HIDDEN_PLAYER),
@@ -255,9 +293,19 @@ function summaryToPrompt(s: WeekSummary): string {
     `Sequências de vitórias em andamento: ${s.streaks.map(([n, c]) => `${n} (${c} seguidas)`).join(", ") || "nenhuma"}.`,
     `Conquistas raras, míticas e secretas liberadas esta semana: ${
       s.achievements.highlights
-        .map((h) => `${h.player} — ${h.name} (${h.rarity}${h.description ? `: ${h.description}` : ", condição secreta"})`)
+        .map(
+          (h) => `${h.player} — ${h.name} (${h.rarity}${h.description ? `: ${h.description}` : ", condição secreta"})`,
+        )
         .join("; ") || "nenhuma"
     }. Outras conquistas comuns/incomuns liberadas: ${s.achievements.others}.`,
+    ...(s.season
+      ? [
+          "",
+          `TEMPORADA EM ANDAMENTO: ${s.season.label} (termina em ${formatDate(s.season.endsAt)}).`,
+          `Classificação da temporada até agora: ${s.season.top.map((t, i) => `${i + 1}º ${t.name} (${t.points} pts)`).join(", ") || "sem partidas"}.`,
+          `Conquistas de temporada liberadas na semana: ${s.season.unlocks.join("; ") || "nenhuma"}.`,
+        ]
+      : []),
     "",
     "PARTIDAS DA SEMANA:",
     ...lines,
@@ -308,6 +356,14 @@ function fallbackNewspaper(s: WeekSummary): string {
           ...s.killsByPlayer.map(([n, c]) => `- ${n}: ${c} eliminaç${c === 1 ? "ão" : "ões"}`),
         ]
       : []),
+    ...(s.season
+      ? [
+          "",
+          `#### 🗓️ Temporada ${s.season.label}`,
+          ...s.season.top.map((t, i) => `- ${i + 1}º ${t.name}: ${t.points} pts`),
+          ...(s.season.unlocks.length ? [`- Conquistas da semana: ${s.season.unlocks.join("; ")}`] : []),
+        ]
+      : []),
     ...(s.achievements.highlights.length
       ? [
           "",
@@ -342,7 +398,7 @@ Um parágrafo curto por partida (no máximo 6; se houver mais, agrupe as menos m
 Uma lista com os pontos de cada jogador na semana, do maior para o menor, com vitórias, abates e mortes.
 
 #### 📈 Sobe e desce
-Movimentos no ranking geral: quem subiu, quem caiu, quem estreou, sequências e primeiras vitórias.
+Movimentos no ranking geral: quem subiu, quem caiu, quem estreou, sequências e primeiras vitórias. Se houver temporada em andamento, comente também a briga pela liderança da temporada e as conquistas de temporada da semana.
 
 #### 🎖️ Conquistas da semana
 Só se houver conquistas raras, míticas ou secretas na semana: quem liberou o quê, em tom de cerimônia. Nunca revele a condição de uma conquista secreta.
@@ -457,10 +513,22 @@ export function weekFromStartDate(startDate: string) {
 export async function regenerateNewspaper(admin: SupabaseClient, id: string) {
   const { data: edition } = await admin
     .from("weekly_newspapers")
-    .select("id, week_start, automatic")
+    .select("id, week_start, automatic, season_id")
     .eq("id", id)
     .maybeSingle();
   if (!edition) throw new Error("Edição não encontrada.");
+  // Edição de encerramento de temporada: refaz com os dados da temporada
+  if (edition.season_id) {
+    const { data: season } = await admin.from("seasons").select("*").eq("id", edition.season_id).single();
+    const { generateSeasonNewspaper } = await import("@/lib/season-newspaper");
+    const { headline, content, source, matches } = await generateSeasonNewspaper(admin, season);
+    const { error } = await admin
+      .from("weekly_newspapers")
+      .update({ headline, content, source, matches_count: matches })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    return { source };
+  }
   if (!edition.automatic) throw new Error("Só edições semanais automáticas podem ser refeitas.");
 
   const { summary, headline, content, source } = await generateNewspaper(admin, weekFromStartDate(edition.week_start));

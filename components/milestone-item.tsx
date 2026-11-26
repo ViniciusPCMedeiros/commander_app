@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Award, Repeat, Sparkles, Swords, Trophy, UserPlus } from "lucide-react";
+import { Award, CalendarRange, Flag, Repeat, Sparkles, Swords, Trophy, UserPlus } from "lucide-react";
+import { themeColor } from "@/lib/seasons";
 import { AchievementChip, AchievementIcon } from "@/components/achievement-badge";
 import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ const STYLE: Record<MilestoneKind, { icon: typeof UserPlus; className: string }>
   first_win: { icon: Trophy, className: "bg-amber-500/15 text-amber-300 ring-amber-500/30" },
   release: { icon: Sparkles, className: "bg-primary/15 text-primary ring-primary/40" },
   achievement: { icon: Award, className: "" },
+  season: { icon: CalendarRange, className: "" },
 };
 
 /** Um marco na linha do tempo. `showName=false` no perfil, onde o jogador já é conhecido. */
@@ -38,14 +40,39 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
   );
 
   const achievement = event.achievementId ? ACHIEVEMENT_BY_ID.get(event.achievementId) : undefined;
+  const season = event.season;
+  const seasonColor = season ? themeColor(season.color) : null;
+  const names = (list: { id: string; name: string }[]) =>
+    list.map((p, i) => (
+      <span key={p.id}>
+        {i > 0 && ", "}
+        <Link href={`/players/${p.id}`} className="font-semibold hover:underline">
+          {p.name}
+        </Link>
+      </span>
+    ));
 
   return (
     <li className="relative flex gap-3 pb-6 last:pb-0">
-      {achievement ? (
+      {season && seasonColor ? (
+        <span
+          className={cn(
+            "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full ring-1",
+            seasonColor.bg,
+            seasonColor.text,
+            seasonColor.ring,
+          )}
+        >
+          {season.phase === "start" ? <CalendarRange className="size-4" /> : <Flag className="size-4" />}
+        </span>
+      ) : achievement ? (
         <AchievementIcon achievement={achievement} className="relative z-10 size-8 ring-1" />
       ) : (
         <span
-          className={cn("relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full ring-1", className)}
+          className={cn(
+            "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full ring-1",
+            className,
+          )}
         >
           <Icon className="size-4" />
         </span>
@@ -54,10 +81,29 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
         <p>
           {event.release && (
             <>
-              <Link href={`/changelog#v${event.release.version}`} className="font-semibold text-primary hover:underline">
+              <Link
+                href={`/changelog#v${event.release.version}`}
+                className="font-semibold text-primary hover:underline"
+              >
                 Mesão v{event.release.version}
               </Link>{" "}
               — {event.release.title}
+            </>
+          )}
+          {season && (
+            <>
+              <Link
+                href={`/seasons?t=${season.number}`}
+                className={cn("font-semibold hover:underline", seasonColor?.text)}
+              >
+                {season.phase === "start" ? "Começou" : "Terminou"} a Temporada {season.number} — {season.name}
+              </Link>
+              {season.phase === "end" && (
+                <span className="block text-muted-foreground">
+                  {season.coroa.length ? <>Coroa: {names(season.coroa)}</> : "Sem Coroa"}
+                  {season.lenda.length > 0 && <> · Lenda: {names(season.lenda)}</>}
+                </span>
+              )}
             </>
           )}
           {achievement && (
@@ -66,7 +112,12 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
               {who && " liberou"} a conquista <AchievementChip achievement={achievement} />
             </>
           )}
-          {event.kind === "joined" && <>{who ?? "Entrou"}{who && " entrou"} no grupo</>}
+          {event.kind === "joined" && (
+            <>
+              {who ?? "Entrou"}
+              {who && " entrou"} no grupo
+            </>
+          )}
           {event.kind === "first_match" && (
             <>
               {who ? <>Primeira partida de {who}</> : "Primeira partida"}

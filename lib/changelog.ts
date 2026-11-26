@@ -16,6 +16,34 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.4.0",
+    date: "2026-12-04T20:00:00-03:00",
+    title: "Temporadas",
+    changes: [
+      {
+        kind: "novo",
+        text: "Temporadas: cada uma tem tema, datas, ranking próprio e conquistas que só valem nela. A página Temporada mostra a classificação, as conquistas e o seu progresso — e, entre uma temporada e outra, avisa que a próxima vem em breve.",
+      },
+      {
+        kind: "novo",
+        text: "Títulos: quem termina em 1º ganha a Coroa da temporada, e quem completa todas as conquistas vira Lenda. Escolha no seu perfil qual título exibir — ele aparece ao lado do nome no perfil, no ranking e nas partidas.",
+      },
+      {
+        kind: "novo",
+        text: "No fim de cada temporada saem o Pódio e o Campeão, e a Gazeta publica uma edição especial de encerramento. A Gazeta semanal também acompanha a briga da temporada.",
+      },
+      { kind: "novo", text: "Ranking por temporada: escolha a temporada nos filtros do Ranking." },
+      {
+        kind: "novo",
+        text: "O histórico do grupo marca o começo e o fim de cada temporada, com quem levou a Coroa e quem virou Lenda.",
+      },
+      {
+        kind: "novo",
+        text: "Root: tela de Temporadas no Admin para lançar e encerrar temporadas, criar temas (arte, cor, títulos e conquistas temáticas) e novas conquistas base.",
+      },
+    ],
+  },
+  {
     version: "1.3.0",
     date: "2026-11-25T14:30:00-03:00",
     title: "Rivalidades e conquistas",

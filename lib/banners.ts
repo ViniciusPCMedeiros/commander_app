@@ -39,3 +39,16 @@ export function resolveBanner(
   const version = Math.floor(fs.statSync(full).mtimeMs);
   return { src: `/banners/${file}?v=${version}`, credit, position: banner.position ?? "center" };
 }
+
+/** Arte escolhida fora da lista fixa (tema de temporada). Só arquivos de public/banners. */
+export function resolveBannerFile(
+  file: string | null | undefined,
+  credit: string | null | undefined,
+): { src: string; credit: string; position: string } | null {
+  if (!file) return null;
+  const name = path.basename(file);
+  const full = path.join(process.cwd(), "public", "banners", name);
+  if (!fs.existsSync(full)) return null;
+  const version = Math.floor(fs.statSync(full).mtimeMs);
+  return { src: `/banners/${name}?v=${version}`, credit: credit ?? "", position: "center" };
+}

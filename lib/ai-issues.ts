@@ -29,8 +29,9 @@ export async function loadAIIssues(admin: SupabaseClient): Promise<AIIssues> {
     admin
       .from("weekly_newspapers")
       .select("id, edition_number, week_start, week_end, source")
-      .eq("automatic", true)
-      .order("week_start", { ascending: false })
+      // Última edição gerada pela rotina: a semanal ou a de encerramento de temporada
+      .or("automatic.eq.true,season_id.not.is.null")
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]);

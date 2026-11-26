@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { syncAchievements } from "@/lib/achievement-sync";
 import { refreshWeeklyInsights } from "@/lib/insights";
+import { publishSeasonNewspaper } from "@/lib/season-newspaper";
+import { closeDueSeasons } from "@/lib/seasons-data";
 import { publishWeeklyNewspaper } from "@/lib/newspaper";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -19,10 +21,24 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const result: { achievements?: unknown; newspaper?: unknown; insights?: string[]; error?: string } = {};
+  const result: {
+    achievements?: unknown;
+    seasons?: number[];
+    newspaper?: unknown;
+    insights?: string[];
+    error?: string;
+  } = {};
   try {
     // Antes da Gazeta, para ela já ver as conquistas da semana
     result.achievements = await syncAchievements(admin);
+    // Temporadas vencidas: pódio, campeão, Coroa e Lenda
+    const closed = await closeDueSeasons(admin);
+    if (closed.length) {
+      result.seasons = closed.map((c) => c.number);
+      console.log(`Temporada(s) encerrada(s): ${closed.map((c) => `T${c.number}`).join(", ")}.`);
+      for (const season of closed) await publishSeasonNewspaper(admin, season);
+      revalidatePath("/", "layout");
+    }
     const newspaper = await publishWeeklyNewspaper(admin);
     result.newspaper = newspaper;
     if (newspaper.status === "published") {

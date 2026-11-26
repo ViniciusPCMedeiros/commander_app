@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPips } from "@/components/color-pips";
 import { MatchCard } from "@/components/match-card";
-import { loadAchievements, unlocksByMatch } from "@/lib/achievements";
+import { loadMatchChips } from "@/lib/match-chips";
 import { requireUser } from "@/lib/auth";
 import { isRoot } from "@/lib/roles";
 import { commanderLabel, formatPct } from "@/lib/format";
@@ -28,7 +28,7 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
   const { id } = await props.params;
   const { supabase, profile } = await requireUser();
   // Conquistas liberadas em cada partida (selinhos no card)
-  const achievementsLoad = loadAchievements(supabase);
+  const achievementsLoad = loadMatchChips(supabase);
 
   const { data: deck } = await supabase.from("deck_stats").select("*").eq("deck_id", id).maybeSingle<DeckStats>();
   if (!deck) notFound();
@@ -71,7 +71,7 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
 
   const canEdit = isRoot(profile.role) || profile.id === deck.owner_id;
 
-  const matchUnlocks = unlocksByMatch(await achievementsLoad);
+  const matchUnlocks = await achievementsLoad;
   return (
     <div className="space-y-6">
       <PageHeader

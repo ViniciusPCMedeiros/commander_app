@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeAllAchievements } from "@/lib/achievements";
+import { syncSeasons } from "@/lib/seasons-data";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -90,7 +91,10 @@ async function runSync(admin: SupabaseClient): Promise<SyncResult> {
     if (error) throw error;
   }
 
-  return { added: rows.length, removed };
+  // 4. Conquistas de temporada (mesmas regras)
+  const season = await syncSeasons(admin);
+
+  return { added: rows.length + season.added, removed: removed + season.removed };
 }
 
 // Uma sincronização por vez; mudanças que chegarem no meio pedem mais uma rodada.

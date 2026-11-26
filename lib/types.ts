@@ -1,3 +1,5 @@
+import type { DisplayTitle } from "@/lib/seasons";
+
 export type Role = "member" | "admin" | "root";
 export type MatchStatus = "pending" | "approved" | "rejected";
 export type UsageStatus = "free" | "allocated" | "partial_free" | "shared_rotation";
@@ -9,6 +11,8 @@ export interface UserProfile {
   avatar_url: string | null;
   role: Role;
   created_at: string;
+  /** Título de temporada exibido ao lado do nome (Lenda ou Coroa). */
+  display_title?: DisplayTitle | null;
 }
 
 export interface Deck {
@@ -63,7 +67,7 @@ export interface MatchParticipant {
 
 export interface MatchWithParticipants extends Match {
   match_participants: (MatchParticipant & {
-    pilot: { name: string } | null;
+    pilot: { name: string; display_title?: DisplayTitle | null } | null;
     owner: { name: string } | null;
     deck: { name: string; commander_image_url: string | null } | null;
   })[];

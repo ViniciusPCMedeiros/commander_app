@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AchievementChip } from "@/components/achievement-badge";
 import { ColorPips } from "@/components/color-pips";
+import { PlayerTitle } from "@/components/player-title";
 import type { AchievementDef } from "@/lib/achievements";
 import { eliminationLabel } from "@/lib/elimination";
 import { commanderLabel, formatDateTime, HIDDEN_PLAYER } from "@/lib/format";
@@ -63,6 +64,7 @@ export function MatchCard({
                     ) : (
                       <span className="font-medium text-muted-foreground italic">{HIDDEN_PLAYER}</span>
                     )}
+                    {p.pilot?.display_title && <PlayerTitle title={p.pilot.display_title} />}
                     {p.is_winner && <Trophy className="size-4 text-amber-400" />}
                     {borrowed && (
                       <Badge variant="outline" className="gap-1 text-[10px]">

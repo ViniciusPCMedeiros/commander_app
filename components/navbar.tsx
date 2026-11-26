@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import {
+  CalendarRange,
   Crosshair,
   Crown,
   History,
@@ -40,6 +41,7 @@ const LINKS = [
   { href: "/ranking", label: "Ranking", icon: Medal },
   { href: "/decks", label: "Decks", icon: Crown },
   { href: "/newspapers", label: "Jornais", icon: Newspaper },
+  { href: "/seasons", label: "Temporada", icon: CalendarRange },
   { href: "/rivalries", label: "Rivalidades", icon: Crosshair },
   { href: "/collection", label: "Coleção", icon: Layers },
   { href: "/history", label: "Histórico", icon: History },
@@ -104,7 +106,7 @@ export function Navbar({
   return (
     <>
       <header className="sticky top-0 z-40 bg-background/75 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-5 px-4">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-5 px-4 lg:gap-3 xl:gap-5">
           <Link href="/" className="group flex shrink-0 items-center gap-2.5">
             <Emblem />
             <span className="leading-none">
@@ -128,8 +130,8 @@ export function Navbar({
                   isActive(href) && "text-primary after:opacity-100",
                 )}
               >
-                {/* Entre 1024 e 1280px os ícones saem para caber todos os itens (com Admin) */}
-                <Icon className="hidden size-3.5 opacity-80 xl:block" />
+                {/* Ícones só com espaço: a partir de 1280px e sem o item Admin (com ele não cabem) */}
+                {links.length <= LINKS.length && <Icon className="hidden size-3.5 opacity-80 xl:block" />}
                 {label}
               </Link>
             ))}

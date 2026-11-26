@@ -5,7 +5,9 @@ import Link from "next/link";
 import { Flame, Play } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { PlayerTitle } from "@/components/player-title";
 import { RankMovement, RankPosition } from "@/components/rank-badges";
+import type { DisplayTitle } from "@/lib/seasons";
 import { formatPct, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +26,7 @@ export interface RaceRow {
   ownGames: number;
   borrowedWins: number;
   borrowedGames: number;
+  title: DisplayTitle | null;
   /** Positivo = subiu; null = estreante. */
   delta: number | null;
   prevIndex: number | null;
@@ -116,9 +119,12 @@ export function RaceBoard({ rows, metric }: { rows: RaceRow[]; metric: "points" 
                   <AvatarFallback>{initials(r.name)}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <Link href={`/players/${r.id}`} className="block truncate text-base font-semibold hover:underline">
-                    {r.name}
-                  </Link>
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <Link href={`/players/${r.id}`} className="truncate text-base font-semibold hover:underline">
+                      {r.name}
+                    </Link>
+                    <PlayerTitle title={r.title} className="hidden sm:inline-flex" />
+                  </div>
                   {/* Celular: resumo embaixo do nome (as colunas não cabem) */}
                   <div className="truncate text-sm text-muted-foreground tabular-nums sm:hidden">
                     {metric === "points" && <>{r.wins}V · </>}

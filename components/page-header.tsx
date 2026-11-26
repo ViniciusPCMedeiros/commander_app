@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
-import { resolveBanner, type BannerName } from "@/lib/banners";
+import { resolveBanner, resolveBannerFile, type BannerName } from "@/lib/banners";
 
 /**
  * Cabeçalho das páginas. A arte da rota cobre o fundo da página inteira (fixa
@@ -14,6 +14,7 @@ export function PageHeader({
   description,
   actions,
   banner,
+  bannerFile,
   children,
 }: {
   eyebrow?: string;
@@ -22,10 +23,12 @@ export function PageHeader({
   actions?: React.ReactNode;
   /** Arte da rota (arquivo em public/banners); sem ela, usa o gradiente de fallback. */
   banner?: BannerName;
+  /** Arte escolhida em tempo de uso (tema da temporada): arquivo em public/banners + crédito. */
+  bannerFile?: { file: string | null; credit: string | null };
   /** Conteúdo extra abaixo da descrição (ex.: legenda, filtros). */
   children?: React.ReactNode;
 }) {
-  const art = resolveBanner(banner);
+  const art = bannerFile ? resolveBannerFile(bannerFile.file, bannerFile.credit) : resolveBanner(banner);
 
   return (
     <>

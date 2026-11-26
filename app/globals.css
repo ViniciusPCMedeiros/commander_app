@@ -142,6 +142,7 @@
   --animate-rank-up: rank-up 1.4s ease-in-out infinite;
   --animate-rank-down: rank-down 1.4s ease-in-out infinite;
   --animate-rank-new: rank-new 1.6s ease-in-out infinite;
+  --animate-title-shine: title-shine 3.5s linear infinite;
 }
 
 @keyframes rank-up {
@@ -157,6 +158,12 @@
 @keyframes rank-new {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
+}
+
+/* Títulos de temporada: um brilho que atravessa o texto */
+@keyframes title-shine {
+  from { background-position: 200% center; }
+  to { background-position: -200% center; }
 }
 
 /* Títulos gravados (Cinzel) com leve brilho dourado */

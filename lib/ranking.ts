@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { commanderLabel, HIDDEN_PLAYER } from "@/lib/format";
+import type { DisplayTitle } from "@/lib/seasons";
 import { scoreMatch } from "@/lib/scoring";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
@@ -73,6 +74,8 @@ export interface PlayerRow extends Base {
   currentStreak: number;
   bestStreak: number;
   lastPlayed: string;
+  /** Título de temporada escolhido pelo jogador. */
+  title: DisplayTitle | null;
   /** Partidas em que foi eliminado (não venceu). */
   deaths: number;
   selfDeaths: number;
@@ -139,8 +142,9 @@ const sessionDay = (iso: string) =>
     day: "2-digit",
   }).format(new Date(iso));
 
-export async function loadRanking(supabase: SupabaseClient, period: Period) {
-  const start = periodStart(period);
+/** `range`: período de uma temporada (substitui `period`). */
+export async function loadRanking(supabase: SupabaseClient, period: Period, range?: { start: Date; end: Date }) {
+  const start = range?.start ?? periodStart(period);
   const page = (from: number, to: number) => {
     let query = supabase
       .from("approved_participations")
@@ -150,12 +154,13 @@ export async function loadRanking(supabase: SupabaseClient, period: Period) {
       .order("played_at", { ascending: true })
       .order("id", { ascending: true });
     if (start) query = query.gte("played_at", start.toISOString());
+    if (range) query = query.lt("played_at", range.end.toISOString());
     return query.range(from, to).returns<Participation[]>();
   };
 
   const [parts, { data: users }, { data: decks }] = await Promise.all([
     fetchAll(page),
-    supabase.from("users").select("id, name, avatar_url"),
+    supabase.from("users").select("id, name, avatar_url, display_title"),
     supabase
       .from("decks")
       .select(
@@ -187,7 +192,7 @@ export async function loadRanking(supabase: SupabaseClient, period: Period) {
 }
 
 type Lookups = {
-  userById: Map<string, { name: string; avatar_url: string | null }>;
+  userById: Map<string, { name: string; avatar_url: string | null; display_title?: DisplayTitle | null }>;
   deckById: Map<
     string,
     {
@@ -228,6 +233,7 @@ function aggregate(rows: ScoredParticipation[], { userById, deckById }: Lookups)
         currentStreak: 0,
         bestStreak: 0,
         lastPlayed: p.played_at,
+        title: u.display_title ?? null,
       } satisfies PlayerRow);
     const own = p.pilot_id === p.deck_owner_id;
     r.games++;
