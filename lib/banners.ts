@@ -15,6 +15,8 @@ export const BANNERS = {
   jornais: { file: "jornais.jpg", credit: "Silverquill Charm — Ksenia Kim" },
   colecao: { file: "colecao.jpg", credit: "Reliquary Tower — Jesper Ejsing" },
   historico: { file: "historico.jpg", credit: "Great Hall of the Biblioplex — Constantin Marin" },
+  // Arte conceitual com texto embaixo (logo e crédito): recortada para tirar o texto
+  rivalidades: { file: "rivalidades.webp", credit: "The Brothers' War (arte conceitual) — Chris Rahn" },
   admin: { file: "admin.jpg", credit: "" }, // carta e artista a confirmar
   // Arte vertical: enquadra o rosto do Ragavan (~26% da altura) em vez do centro
   novidades: { file: "novidades.jpg", credit: "Ragavan, Nimble Pilferer — Zoltan Boros", position: "50% 22%" },

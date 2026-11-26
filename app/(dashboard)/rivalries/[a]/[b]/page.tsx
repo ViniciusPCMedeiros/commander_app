@@ -58,6 +58,7 @@ export default async function DuelPage(props: PageProps<"/rivalries/[a]/[b]">) {
   return (
     <div className="space-y-6">
       <PageHeader
+        banner="rivalidades"
         eyebrow="Confronto direto"
         title={
           <span className="flex flex-wrap items-center gap-3">
