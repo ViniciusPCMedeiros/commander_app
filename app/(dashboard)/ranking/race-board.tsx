@@ -6,6 +6,7 @@ import { Flame, Play } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PlayerTitle } from "@/components/player-title";
+import { PlayerLevel } from "@/components/player-level";
 import { RankMovement, RankPosition } from "@/components/rank-badges";
 import type { DisplayTitle } from "@/lib/seasons";
 import { formatPct, initials } from "@/lib/format";
@@ -123,6 +124,7 @@ export function RaceBoard({ rows, metric }: { rows: RaceRow[]; metric: "points" 
                     <Link href={`/players/${r.id}`} className="truncate text-base font-semibold hover:underline">
                       {r.name}
                     </Link>
+                    <PlayerLevel id={r.id} className="self-center" />
                     <PlayerTitle title={r.title} className="hidden sm:inline-flex" />
                   </div>
                   {/* Celular: resumo embaixo do nome (as colunas não cabem) */}

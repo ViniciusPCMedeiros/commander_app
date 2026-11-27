@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PlayerLevel } from "@/components/player-level";
 import { notFound } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, ExternalLink, PackageX, ScanLine } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -88,7 +89,8 @@ export default async function DeckPage(props: PageProps<"/decks/[id]">) {
             {commanderLabel(deck.commander_name, deck.partner_name)} · de{" "}
             <Link href={`/players/${deck.owner_id}`} className="underline">
               {deck.owner_name}
-            </Link>
+            </Link>{" "}
+            <PlayerLevel id={deck.owner_id} className="align-middle" />
           </>
         }
         actions={

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PlayerLevel } from "@/components/player-level";
 import { Crown } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +63,7 @@ export default async function AchievementsPage() {
                   <Link href={`/players/${u.playerId}`} className="font-semibold hover:underline">
                     {byId.get(u.playerId)?.name}
                   </Link>
+                  <PlayerLevel id={u.playerId} />
                   <AchievementChip achievement={a} />
                   <span className="text-xs text-muted-foreground">{formatDate(u.at)}</span>
                 </div>
@@ -131,6 +133,7 @@ export default async function AchievementsPage() {
                         >
                           <Crown className="size-3 shrink-0 text-amber-400" />
                           <span className="truncate">{byId.get(pioneer.playerId)?.name}</span>
+                          <PlayerLevel id={pioneer.playerId} />
                         </span>
                       </>
                     )}

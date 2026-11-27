@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Bot, CalendarRange, Hourglass } from "lucide-react";
+import { Bot, CalendarRange, EyeOff, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,6 +15,9 @@ import { AIRetryButton } from "./ai-retry-button";
 import { CreateUserForm } from "./create-user-form";
 import { RoleSelect } from "./role-select";
 import { PageHeader } from "@/components/page-header";
+import { LevelBadge } from "@/components/level-badge";
+import { ELO_CALIBRATION_GAMES, ELO_K, ELO_K_CALIBRATION, ELO_START } from "@/lib/level";
+import { loadLevels } from "@/lib/level-data";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -30,12 +33,21 @@ export default async function AdminPage() {
     admin.auth.admin.listUsers({ perPage: 1000 }),
     admin.from("matches").select("id", { count: "exact", head: true }).eq("status", "pending"),
   ]);
-  const aiIssues = isRoot(profile.role) ? await loadAIIssues(admin) : null;
+  const [aiIssues, levels] = isRoot(profile.role)
+    ? await Promise.all([loadAIIssues(admin), loadLevels(admin)])
+    : [null, null];
 
   // O root é invisível: só aparece para outro root
   const members = (users ?? []).filter((u) => u.role !== "root" || isRoot(profile.role));
   const statsById = new Map((stats ?? []).map((s) => [s.user_id, s]));
   const lastLogin = new Map((authUsers?.users ?? []).map((u) => [u.id, u.last_sign_in_at]));
+  const nameById = new Map((users ?? []).map((u) => [u.id, u.name]));
+  // Habilidade (Elo): só o root vê; vai servir para montar as mesas da Liga
+  const skill = levels
+    ? [...levels.elo]
+        .map(([id, e]) => ({ id, name: nameById.get(id) ?? "?", ...e, tier: levels.levels.get(id)?.tier }))
+        .sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name))
+    : null;
 
   return (
     <div className="space-y-6">
@@ -120,6 +132,51 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      {skill && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <EyeOff className="size-5" /> Habilidade (Elo)
+            </CardTitle>
+            <CardDescription>
+              Só o root vê. Começa em {ELO_START}; em cada partida, cada par da mesa é um duelo (quem venceu ganha de
+              quem perdeu; entre quem perdeu, ganha quem fez mais abates). K = {ELO_K_CALIBRATION} nas primeiras{" "}
+              {ELO_CALIBRATION_GAMES} partidas (calibração) e {ELO_K} depois. Vai servir para montar mesas justas na
+              Liga.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-0 sm:px-6">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10 text-right">#</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead className="text-right">Elo</TableHead>
+                  <TableHead className="text-right">Partidas</TableHead>
+                  <TableHead className="hidden sm:table-cell">Nível</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {skill.map((p, i) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-right text-muted-foreground tabular-nums">{i + 1}</TableCell>
+                    <TableCell>
+                      <Link href={`/players/${p.id}`} className="font-medium hover:underline">
+                        {p.name}
+                      </Link>
+                      {p.calibrating && <span className="ml-2 text-xs text-muted-foreground">em calibração</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{p.rating}</TableCell>
+                    <TableCell className="text-right tabular-nums">{p.games}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{p.tier && <LevelBadge index={p.tier.index} division={p.tier.division} />}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {aiIssues && (
         <Card id="ia" className={aiIssues.total ? "border-amber-500/40" : undefined}>

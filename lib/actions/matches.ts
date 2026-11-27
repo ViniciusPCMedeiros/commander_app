@@ -30,6 +30,8 @@ function revalidateAll() {
   revalidatePath("/matches");
   revalidatePath("/decks");
   revalidatePath("/players/[id]", "page");
+  // O nível de cada pessoa (símbolo ao lado do nome) vem do layout
+  revalidatePath("/", "layout");
 }
 
 /** Regras comuns a criar e editar partida. Retorna a mensagem de erro, se houver. */

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AchievementChip } from "@/components/achievement-badge";
 import { ColorPips } from "@/components/color-pips";
+import { PlayerLevel } from "@/components/player-level";
 import { PlayerTitle } from "@/components/player-title";
 import type { AchievementDef } from "@/lib/achievements";
 import { eliminationLabel } from "@/lib/elimination";
@@ -64,6 +65,7 @@ export function MatchCard({
                     ) : (
                       <span className="font-medium text-muted-foreground italic">{HIDDEN_PLAYER}</span>
                     )}
+                    {p.pilot && <PlayerLevel id={p.pilot_id} />}
                     {p.pilot?.display_title && <PlayerTitle title={p.pilot.display_title} />}
                     {p.is_winner && <Trophy className="size-4 text-amber-400" />}
                     {borrowed && (

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Flag, Loader2, Pencil, Plus, Rocket, Trash2, XCircle } from "lucide-react";
+import { CalendarClock, Flag, Loader2, Pencil, Plus, Rocket, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   deleteBaseAchievement,
   endSeasonNow,
   launchSeason,
+  themeForRelaunch,
   updateSeasonEnd,
   type ThemeInput,
 } from "@/lib/actions/seasons";
@@ -30,6 +31,7 @@ import {
   type Season,
   type SeasonAchievementInput,
 } from "@/lib/seasons";
+import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AchievementRow, emptyAchievement } from "./achievement-editor";
 import { emptyTheme, ThemeEditor } from "./theme-editor";
@@ -114,6 +116,16 @@ export function SeasonAdmin({
 
   // Temas e base
   const [editing, setEditing] = useState<string | "new" | null>(null);
+  // Relançar uma temporada encerrada: o mesmo tema no formulário, já aberto para editar as conquistas
+  const relaunch = (seasonId: string) =>
+    start(async () => {
+      const res = await themeForRelaunch(seasonId);
+      if (res.error || !res.id) return void toast.error(res.error ?? "Não deu para relançar.");
+      setThemeId(res.id);
+      setEditing(res.id);
+      router.refresh();
+      document.getElementById("lancar")?.scrollIntoView({ behavior: "smooth" });
+    });
   const [newBase, setNewBase] = useState<SeasonAchievementInput | null>(null);
   const [endEdit, setEndEdit] = useState<Record<string, string>>({});
 
@@ -208,22 +220,44 @@ export function SeasonAdmin({
             );
           })}
           {closed.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Encerradas: {closed.map((s) => `T${s.number} · ${s.theme.name}`).join(", ")}.
-            </p>
+            <div className="space-y-1.5">
+              <div className="text-xs text-muted-foreground">Encerradas</div>
+              <ul className="space-y-1">
+                {closed.map((s) => (
+                    <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <span>
+                        T{s.number} · {s.theme.name}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({formatDate(s.starts_at)} a {formatDate(s.ends_at)})
+                        </span>
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7"
+                        disabled={pending}
+                        onClick={() => relaunch(s.id)}
+                      >
+                        <RotateCcw /> Relançar
+                      </Button>
+                    </li>
+                  ))}
+              </ul>
+            </div>
           )}
         </CardContent>
       </Card>
 
       {/* Lançar */}
-      <Card>
+      <Card id="lancar" className="scroll-mt-20">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Rocket className="size-5" /> Lançar temporada
           </CardTitle>
           <CardDescription>
             Escolha o tema (pode repetir um antigo) e as datas, no horário de Brasília. Partidas já jogadas dentro do
-            período contam.
+            período contam. Para trocar as conquistas de um tema antigo, edite o tema (abaixo) antes de lançar: as
+            temporadas que já usaram o tema continuam com as conquistas de quando foram lançadas.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

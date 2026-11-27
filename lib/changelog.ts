@@ -16,6 +16,42 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: "1.4.1",
+    // Data provisória: acertar no dia do deploy
+    date: "2026-12-07T20:00:00-03:00",
+    title: "Nível",
+    changes: [
+      {
+        kind: "novo",
+        text: "Nível: cada pessoa ganha XP com partidas, vitórias, abates, conquistas, temporadas e decks diferentes jogados, e sobe de faixa (Neófito, Conjurador, Arcano, Arquimago, Planinauta), cada uma com 3 divisões: Iniciante, Adepto e Mestre. O XP nunca cai e vale todo o histórico.",
+      },
+      {
+        kind: "novo",
+        text: "No perfil, o card Nível mostra a faixa e a divisão (ex.: Arcano Adepto), quanto falta para a próxima e de onde veio cada ponto de XP. A faixa também aparece no perfil."
+      },
+      {
+        kind: "novo",
+        text: "O símbolo da faixa aparece ao lado do nome em todo o app: ranking, painel, partidas, rivalidades, temporada, conquistas, decks e histórico. Passe o mouse para ver o nome da faixa.",
+      },
+      {
+        kind: "novo",
+        text: "Página Níveis (pelo Ranking): o nível de todo mundo, quantas pessoas há em cada faixa e como ganhar XP.",
+      },
+      {
+        kind: "melhoria",
+        text: "Conquistas de coleção não dão XP (cadastrar cartas não sobe nível); só contam os decks que já foram jogados em partidas aprovadas.",
+      },
+      {
+        kind: "melhoria",
+        text: "O ranking agora é por temporada: durante uma temporada, o Ranking e o Painel mostram a pontuação dela, e cada temporada nova recomeça do zero. Entre uma temporada e outra, fica o resultado final da última. Nível, Elo, vitórias, abates e partidas da carreira não zeram. \"Desde sempre\" continua nos filtros do Ranking.",
+      },
+      {
+        kind: "novo",
+        text: "Admin → Temporadas: botão Relançar nas temporadas encerradas. Traz o mesmo tema de volta (ex.: Festas um ano depois), já aberto para trocar as conquistas antes de lançar. Funciona mesmo se o tema tiver sido excluído.",
+      },
+    ],
+  },
+  {
     version: "1.4.0",
     date: "2026-12-04T20:00:00-03:00",
     title: "Temporadas",

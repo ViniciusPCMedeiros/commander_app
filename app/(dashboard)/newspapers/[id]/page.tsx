@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PlayerLevel } from "@/components/player-level";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, Crown, Medal, Repeat } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -136,7 +137,8 @@ export default async function NewspaperPage(props: PageProps<"/newspapers/[id]">
                     por{" "}
                     <Link href={`/players/${author.id}`} className="underline">
                       {author.name}
-                    </Link>
+                    </Link>{" "}
+                    <PlayerLevel id={author.id} className="align-middle" />
                   </span>
                 )}
                 {paper.source && (

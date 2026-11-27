@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Award, Crosshair, Flame, Info, Trophy } from "lucide-react";
+import { Award, Crosshair, Flame, Info, TrendingUp, Trophy } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,9 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { RankMovement, RankPosition } from "@/components/rank-badges";
+import { PlayerLevel } from "@/components/player-level";
 import { PlayerTitle } from "@/components/player-title";
 import { requireUser } from "@/lib/auth";
-import { seasonLabel, seasonStatus } from "@/lib/seasons";
+import { rankingSeason, seasonLabel, seasonStatus } from "@/lib/seasons";
 import { loadSeasons } from "@/lib/seasons-data";
 import { formatDate, formatDay, formatPct, initials } from "@/lib/format";
 import {
@@ -82,15 +83,18 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
   const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "players";
 
   const { supabase } = await requireUser();
-  // ?season=N: ranking só com as partidas daquela temporada
+  // ?season=N: ranking só com as partidas daquela temporada. Sem filtro na URL, abre na
+  // temporada (a pontuação recomeça a cada uma); "Desde sempre" continua nos filtros.
   const seasons = await loadSeasons(supabase);
-  const season = seasons.find((x) => x.number === Number(sp.season)) ?? null;
+  const season =
+    sp.season === undefined && sp.period === undefined
+      ? rankingSeason(seasons)
+      : (seasons.find((x) => x.number === Number(sp.season)) ?? null);
   const data = await loadRanking(
     supabase,
     period,
     season ? { start: new Date(season.starts_at), end: new Date(season.ends_at) } : undefined,
   );
-
   const players = sortRows(data.players, sort);
   const decks = sortRows(data.decks, sort);
   const commanders = sortRows(data.commanders, sort);
@@ -121,7 +125,9 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
           title="Ranking"
           description={`${data.matches} partida(s) aprovada(s) · ${
             season
-              ? `temporada ${seasonLabel(season)} (${formatDate(season.starts_at)} a ${formatDate(season.ends_at)})`
+              ? `temporada ${seasonLabel(season)} (${formatDate(season.starts_at)} a ${formatDate(season.ends_at)})${
+                  { active: "", upcoming: "", ended: " · encerrando", closed: " · resultado final" }[seasonStatus(season)]
+                }`
               : PERIOD_LABEL[period].toLowerCase()
           }`}
           actions={
@@ -129,6 +135,7 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
               {[
                 { href: "/rivalries", label: "Rivalidades", icon: Crosshair },
                 { href: "/achievements", label: "Conquistas", icon: Award },
+                { href: "/levels", label: "Níveis", icon: TrendingUp },
               ].map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
@@ -248,7 +255,10 @@ export default async function RankingPage(props: PageProps<"/ranking">) {
                       {p.avatar_url && <AvatarImage src={p.avatar_url} alt="" />}
                       <AvatarFallback>{initials(p.name)}</AvatarFallback>
                     </Avatar>
-                    <div className="max-w-full truncate font-semibold">{p.name}</div>
+                    <div className="flex max-w-full items-center gap-1.5">
+                      <span className="truncate font-semibold">{p.name}</span>
+                      <PlayerLevel id={p.id} />
+                    </div>
                     <PlayerTitle title={p.title} className="max-w-full" />
                     <div className="text-xs text-muted-foreground tabular-nums">
                       {sort === "points" && <span className="font-semibold text-foreground">{p.points} pts · </span>}

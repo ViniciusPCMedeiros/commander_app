@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PlayerLevel } from "@/components/player-level";
 import { Flame } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
@@ -76,8 +77,12 @@ export default async function RivalriesPage(props: PageProps<"/rivalries">) {
                         <span className="font-display text-xs font-bold tracking-widest text-primary">VS</span>
                         <PlayerAvatar player={b} />
                         <div className="min-w-0 flex-1 text-sm leading-tight font-semibold">
-                          <div className="truncate">{a?.name}</div>
-                          <div className="truncate">{b?.name}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate">{a?.name}</span> <PlayerLevel id={a?.id} />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate">{b?.name}</span> <PlayerLevel id={b?.id} />
+                          </div>
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center">
@@ -141,6 +146,7 @@ export default async function RivalriesPage(props: PageProps<"/rivalries">) {
                           <Link href={`/players/${row.id}`} className="flex items-center gap-2 hover:underline">
                             <PlayerAvatar player={row} className="size-7 sm:hidden" />
                             <span className="hidden max-w-32 truncate sm:inline">{row.name}</span>
+                            <PlayerLevel id={row.id} className="hidden sm:inline-flex" />
                             <span className="sr-only sm:hidden">{row.name}</span>
                           </Link>
                         </th>

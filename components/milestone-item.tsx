@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PlayerLevel } from "@/components/player-level";
 import { Award, CalendarRange, Flag, Repeat, Sparkles, Swords, Trophy, UserPlus } from "lucide-react";
 import { themeColor } from "@/lib/seasons";
 import { AchievementChip, AchievementIcon } from "@/components/achievement-badge";
@@ -21,9 +22,12 @@ const STYLE: Record<MilestoneKind, { icon: typeof UserPlus; className: string }>
 export function MilestoneItem({ event, showName = true }: { event: MilestoneEvent; showName?: boolean }) {
   const { icon: Icon, className } = STYLE[event.wonFirst ? "first_win" : event.kind];
   const who = showName ? (
-    <Link href={`/players/${event.userId}`} className="font-semibold hover:underline">
-      {event.name}
-    </Link>
+    <>
+      <Link href={`/players/${event.userId}`} className="font-semibold hover:underline">
+        {event.name}
+      </Link>{" "}
+      <PlayerLevel id={event.userId} className="align-middle" />
+    </>
   ) : null;
   const deck = event.commander && (
     <>
@@ -48,7 +52,8 @@ export function MilestoneItem({ event, showName = true }: { event: MilestoneEven
         {i > 0 && ", "}
         <Link href={`/players/${p.id}`} className="font-semibold hover:underline">
           {p.name}
-        </Link>
+        </Link>{" "}
+        <PlayerLevel id={p.id} className="align-middle" />
       </span>
     ));
 

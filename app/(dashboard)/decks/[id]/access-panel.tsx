@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { PlayerLevel } from "@/components/player-level";
 import { Loader2, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -69,6 +70,7 @@ export function AccessPanel({
                   <Link href={`/players/${a.user_id}`} className="text-sm hover:underline">
                     {a.name}
                   </Link>
+                  <PlayerLevel id={a.user_id} />
                   {canRemove ? (
                     <Button
                       type="button"

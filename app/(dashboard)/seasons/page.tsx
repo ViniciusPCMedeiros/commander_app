@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RARITY_STYLE } from "@/components/achievement-badge";
 import { PageHeader } from "@/components/page-header";
 import { PlayerTitle } from "@/components/player-title";
+import { PlayerLevel } from "@/components/player-level";
 import { SeasonAchievementIcon } from "@/components/season-badge";
 import { RARITY_LABEL } from "@/lib/achievements";
 import { requireUser } from "@/lib/auth";
@@ -207,7 +208,10 @@ export default async function SeasonsPage(props: PageProps<"/seasons">) {
                   {p.avatar_url && <AvatarImage src={p.avatar_url} alt="" />}
                   <AvatarFallback className="text-[10px]">{initials(p.name)}</AvatarFallback>
                 </Avatar>
-                <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="truncate font-medium">{p.name}</span>
+                  <PlayerLevel id={p.id} />
+                </span>
                 <span className="font-semibold text-primary tabular-nums">{p.points} pts</span>
               </Link>
             ))}

@@ -489,6 +489,22 @@ export function seasonStatus(s: Pick<Season, "starts_at" | "ends_at" | "closed_a
   return "ended"; // passou da data, aguardando o encerramento automático
 }
 
+/**
+ * Temporada que o ranking mostra por padrão: a ativa (a pontuação recomeça do zero a
+ * cada temporada); entre uma e outra, o resultado final da última. Sem nenhuma, null
+ * (ranking desde sempre). `seasons` em ordem de número.
+ */
+export function rankingSeason<T extends Pick<Season, "starts_at" | "ends_at" | "closed_at">>(
+  seasons: T[],
+  now = new Date(),
+): T | null {
+  return (
+    seasons.find((s) => seasonStatus(s, now) === "active") ??
+    seasons.filter((s) => new Date(s.starts_at) <= now).at(-1) ??
+    null
+  );
+}
+
 /** Até quantos dias depois do fim a temporada espera as partidas pendentes do período. */
 export const CLOSE_GRACE_DAYS = 7;
 export const closeDeadline = (s: Pick<Season, "ends_at">) =>

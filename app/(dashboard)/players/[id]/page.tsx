@@ -9,6 +9,9 @@ import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { Score } from "@/components/duel-ui";
 import { PlayerTitle } from "@/components/player-title";
+import { LevelBadge } from "@/components/level-badge";
+import { LevelCard } from "@/components/level-card";
+import { getLevels } from "@/lib/level-data";
 import { SeasonAchievementIcon } from "@/components/season-badge";
 import { seasonLabel, themeColor, titleFor } from "@/lib/seasons";
 import { loadSeasons } from "@/lib/seasons-data";
@@ -64,6 +67,7 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
     achievements,
     seasons,
     seasonUnlocks,
+    { levels },
   ] = await Promise.all([
     supabase.from("player_stats").select("*").eq("user_id", id).single<PlayerStats>(),
     supabase
@@ -124,7 +128,9 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
         .order("achievement_key")
         .range(from, to),
     ),
+    getLevels(),
   ]);
+  const level = levels.get(id);
   // Linha do tempo em ordem cronológica (entrou → primeira partida → primeira vitória)
   const timeline = milestones ? milestoneEvents([milestones]).reverse() : [];
   const needed = proxies.filter((p) => p.needed_qty > 0);
@@ -250,7 +256,10 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
             </Avatar>
             <span className="flex flex-col gap-1">
               {player.name}
-              <PlayerTitle title={player.display_title} className="font-sans text-sm" />
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {level && <LevelBadge index={level.tier.index} division={level.tier.division} className="font-sans text-sm" />}
+                <PlayerTitle title={player.display_title} className="font-sans text-sm" />
+              </span>
             </span>
             {player.role !== "member" && <Badge variant="secondary">{ROLE_LABEL[player.role]}</Badge>}
           </span>
@@ -274,6 +283,8 @@ export default async function PlayerPage(props: PageProps<"/players/[id]">) {
           </Card>
         ))}
       </div>
+
+      {level && <LevelCard name={player.name} level={level} />}
 
       <Card>
         <CardHeader>

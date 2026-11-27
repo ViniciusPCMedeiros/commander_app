@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PlayerLevel } from "@/components/player-level";
 import { notFound } from "next/navigation";
 import { ArrowLeftRight, Skull, Swords } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,9 +64,13 @@ export default async function DuelPage(props: PageProps<"/rivalries/[a]/[b]">) {
         title={
           <span className="flex flex-wrap items-center gap-3">
             <PlayerAvatar player={pa} className="size-12" />
-            <span>{pa.name}</span>
+            <span className="inline-flex items-center gap-2">
+              {pa.name} <PlayerLevel id={pa.id} className="[&>svg]:size-5" />
+            </span>
             <span className="text-base font-bold tracking-widest text-primary">VS</span>
-            <span>{pb.name}</span>
+            <span className="inline-flex items-center gap-2">
+              {pb.name} <PlayerLevel id={pb.id} className="[&>svg]:size-5" />
+            </span>
             <PlayerAvatar player={pb} className="size-12" />
           </span>
         }

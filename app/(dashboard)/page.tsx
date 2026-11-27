@@ -7,7 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
 import { MatchCard } from "@/components/match-card";
+import { PlayerLevel } from "@/components/player-level";
 import { loadMatchChips } from "@/lib/match-chips";
+import { loadRanking, sortRows } from "@/lib/ranking";
+import { rankingSeason, seasonLabel, seasonStatus } from "@/lib/seasons";
+import { loadSeasons } from "@/lib/seasons-data";
+import { cn } from "@/lib/utils";
 import { isAIConfigured } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { commanderLabel, formatPct, initials } from "@/lib/format";
@@ -21,6 +26,12 @@ export default async function DashboardPage() {
   const { supabase, profile } = await requireUser();
   // Conquistas liberadas em cada partida (selinhos no card)
   const achievementsLoad = loadMatchChips(supabase);
+
+  // Com temporada, o ranking do painel é o da temporada (a pontuação recomeça a cada uma)
+  const season = rankingSeason(await loadSeasons(supabase));
+  const seasonLoad = season
+    ? loadRanking(supabase, "all", { start: new Date(season.starts_at), end: new Date(season.ends_at) })
+    : null;
 
   const [players, decks, approvedCount, pendingCount, activeDecks, newspaper, recent] = await Promise.all([
     supabase.from("player_stats").select("*").returns<PlayerStats[]>(),
@@ -50,14 +61,41 @@ export default async function DashboardPage() {
       .returns<MatchWithParticipants[]>(),
   ]);
 
-  const ranking = [...(players.data ?? [])].sort(
-    (a, b) =>
-      b.total_wins - a.total_wins || Number(b.overall_winrate) - Number(a.overall_winrate) || b.total_games - a.total_games,
-  );
+  const allTime = players.data ?? [];
+  const ranking: {
+    id: string;
+    name: string;
+    avatar_url: string | null;
+    points: number | null;
+    wins: number;
+    games: number;
+    winrate: number;
+    borrowedWins: number;
+    borrowedGames: number;
+  }[] = seasonLoad
+    ? sortRows((await seasonLoad).players, "points")
+    : [...allTime]
+        .sort(
+          (a, b) =>
+            b.total_wins - a.total_wins ||
+            Number(b.overall_winrate) - Number(a.overall_winrate) ||
+            b.total_games - a.total_games,
+        )
+        .map((p) => ({
+          id: p.user_id,
+          name: p.player_name,
+          avatar_url: p.avatar_url,
+          points: null,
+          wins: p.total_wins,
+          games: p.total_games,
+          winrate: Number(p.overall_winrate),
+          borrowedWins: p.borrowed_deck_wins,
+          borrowedGames: p.borrowed_deck_games,
+        }));
 
   const kpis = [
     { label: "Partidas validadas", value: approvedCount.count ?? 0, icon: Swords },
-    { label: "Jogadores", value: ranking.length, icon: Users },
+    { label: "Jogadores", value: allTime.length, icon: Users },
     { label: "Decks ativos", value: activeDecks.count ?? 0, icon: Crown },
     { label: "Aguardando moderação", value: pendingCount.count ?? 0, icon: Hourglass, href: "/matches?tab=queue" },
   ];
@@ -108,7 +146,9 @@ export default async function DashboardPage() {
                 <Medal className="size-5 text-primary" /> Ranking de jogadores
               </CardTitle>
               <CardDescription className="flex items-center justify-between gap-2">
-                Somente partidas aprovadas.
+                {season
+                  ? `${seasonLabel(season)}${{ active: "", upcoming: "", ended: " · encerrando", closed: " · resultado final" }[seasonStatus(season)]}. Somente partidas aprovadas.`
+                  : "Somente partidas aprovadas."}
                 <Link href="/ranking" className="text-foreground hover:underline">
                   Ver ranking completo →
                 </Link>
@@ -120,6 +160,7 @@ export default async function DashboardPage() {
                   <TableRow>
                     <TableHead className="w-8">#</TableHead>
                     <TableHead>Jogador</TableHead>
+                    {season && <TableHead className="text-right">Pts</TableHead>}
                     <TableHead className="text-right">V</TableHead>
                     <TableHead className="text-right">J</TableHead>
                     <TableHead className="text-right">Win%</TableHead>
@@ -127,25 +168,36 @@ export default async function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {season && ranking.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                        Nenhuma partida na temporada ainda: todo mundo começa do zero.
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {ranking.map((p, i) => (
-                    <TableRow key={p.user_id}>
+                    <TableRow key={p.id}>
                       <TableCell>
                         <RankPosition position={i + 1} className="text-lg" />
                       </TableCell>
                       <TableCell>
-                        <Link href={`/players/${p.user_id}`} className="flex items-center gap-2 hover:underline">
+                        <Link href={`/players/${p.id}`} className="flex items-center gap-2 hover:underline">
                           <Avatar className="size-6">
                             {p.avatar_url && <AvatarImage src={p.avatar_url} alt="" />}
-                            <AvatarFallback className="text-[10px]">{initials(p.player_name)}</AvatarFallback>
+                            <AvatarFallback className="text-[10px]">{initials(p.name)}</AvatarFallback>
                           </Avatar>
-                          {p.player_name}
+                          {p.name}
+                          <PlayerLevel id={p.id} />
                         </Link>
                       </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{p.total_wins}</TableCell>
-                      <TableCell className="text-right tabular-nums">{p.total_games}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatPct(p.overall_winrate)}</TableCell>
+                      {season && (
+                        <TableCell className="text-right font-semibold text-primary tabular-nums">{p.points}</TableCell>
+                      )}
+                      <TableCell className={cn("text-right tabular-nums", !season && "font-semibold")}>{p.wins}</TableCell>
+                      <TableCell className="text-right tabular-nums">{p.games}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatPct(p.winrate)}</TableCell>
                       <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
-                        {p.borrowed_deck_wins}/{p.borrowed_deck_games}
+                        {p.borrowedWins}/{p.borrowedGames}
                       </TableCell>
                     </TableRow>
                   ))}

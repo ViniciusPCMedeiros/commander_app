@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ColorPips } from "@/components/color-pips";
 import { CommanderArt } from "@/components/commander-art";
+import { PlayerLevel } from "@/components/player-level";
 import { requireUser } from "@/lib/auth";
 import { commanderLabel, formatPct } from "@/lib/format";
 import type { DeckStats } from "@/lib/types";
@@ -38,7 +39,9 @@ function DeckGrid({ decks, allowedByDeck }: { decks: DeckStats[]; allowedByDeck:
                 <ColorPips colors={d.color_identity} />
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>de {d.owner_name}</span>
+                <span className="inline-flex items-center gap-1">
+                  de {d.owner_name} <PlayerLevel id={d.owner_id} />
+                </span>
                 <div className="flex gap-1">
                   {allowedByDeck.has(d.deck_id) && (
                     <Badge variant="outline" className="border-sky-500/40 text-sky-300" title={allowedByDeck.get(d.deck_id)!.join(", ")}>

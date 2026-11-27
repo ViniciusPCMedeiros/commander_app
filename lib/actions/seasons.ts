@@ -126,6 +126,44 @@ export async function deleteTheme(id: string): Promise<Result> {
   return {};
 }
 
+/**
+ * Relançar uma temporada encerrada: devolve o tema dela. Se o tema foi excluído,
+ * recria a partir da cópia guardada na temporada (nome, cor, arte, títulos e as
+ * conquistas do tema), para poder editar as conquistas antes de lançar de novo.
+ */
+export async function themeForRelaunch(seasonId: string): Promise<Result & { id?: string }> {
+  const { supabase, profile } = await requireRoot();
+  const { data: season } = await supabase
+    .from("seasons")
+    .select("theme_id, theme, achievements")
+    .eq("id", seasonId)
+    .single<Pick<Season, "theme_id" | "theme" | "achievements">>();
+  if (!season) return { error: "Temporada não encontrada." };
+  if (season.theme_id) return { id: season.theme_id };
+
+  const t = season.theme;
+  const { data, error } = await supabase
+    .from("season_themes")
+    .insert({
+      name: t.name,
+      description: t.description,
+      color: t.color,
+      banner: t.banner,
+      banner_credit: t.banner_credit,
+      title_lenda: t.title_lenda,
+      title_coroa: t.title_coroa,
+      achievements: season.achievements.filter((a) => a.source === "tema").map((a) => cleanAchievement(a, a.key)),
+      created_by: profile.id,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+  // A temporada passa a apontar para o tema recriado (um próximo Relançar usa o mesmo)
+  await supabase.from("seasons").update({ theme_id: data.id }).eq("id", seasonId);
+  revalidateSeasons();
+  return { id: data.id };
+}
+
 export async function addBaseAchievement(input: SeasonAchievementInput): Promise<Result> {
   const { supabase, profile } = await requireRoot();
   const problem = validateAchievement(input, 0);
