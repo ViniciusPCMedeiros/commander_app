@@ -29,6 +29,23 @@ temporada**; o root cria o tema "Festas" e lança pelo Admin.
   - [ ] Frequentador da temporada: baixar de 8 para 6 semanas (a cada 13)?
   - [ ] Lenda da temporada: continua exigindo também Hat-trick e Massacre?
 
+## v1.4.1 — Nível de jogo (depois do deploy da v1.4.0)
+
+Sai antes da Liga para acumular histórico: quando a v2.0.0 começar (mar/2027), quem já
+joga no Mesão terá meses de nível calculado. Branch nova a partir da `v1.4.0`; depois
+levar para a `v1.5.0`.
+
+- [ ] Rating multiplayer (proposta: OpenSkill, estilo TrueSkill, biblioteca aberta em
+      JS): habilidade + incerteza; quem tem poucas partidas fica "em calibração" e se
+      ajusta rápido
+- [ ] Calculado com todas as partidas aprovadas (retroativo), sem o root
+- [ ] Recalcula quando uma partida é aprovada, recusada ou excluída
+- A definir:
+  - [ ] Onde aparece: perfil, ranking, card da partida? Ou só por dentro (para a Liga)?
+  - [ ] Número ou faixas com nomes neutros (ex.: Bronze, Prata, Ouro, Diamante)
+  - [ ] Abate conta para o nível, ou só quem venceu?
+  - [ ] Inatividade: a incerteza volta a subir para quem ficou meses sem jogar?
+
 ## v1.5.0 — Contratos semanais e Rei da Mesa (`v1.5.0`)
 
 Revisão feita em 26/11/2026. O núcleo (votos, travas, sorteio, fuso, desempates,
@@ -161,9 +178,20 @@ partida, o que basta para V/K/D sem mudar o cadastro de partidas.
 - **Mesas travadas em 4** e **rodadas sem data**: no início do ano o app gera as
   primeiras mesas ("mesões"); quando todas são jogadas e **confirmadas por um admin**,
   saem as próximas. 1º e 2º turnos.
-- **Inscrição com deck fixo**: antes de a liga começar, quem quer participar marca
-  interesse e escolhe o deck da liga. As mesas iniciais são geradas com esses decks, e
-  ao registrar uma partida da liga o deck já vem preenchido.
+- **Página da Liga**: durante a liga mostra a tabela, as rodadas e as mesas; fora
+  dela, mostra as inscrições para a próxima (e o histórico das anteriores).
+- **Inscrição com deck**: antes de a liga começar, quem quer participar se inscreve
+  com um deck. Durante a liga **não pode trocar de comandante**, mas pode mexer nas
+  cartas do deck. As mesas são geradas com esses decks, e ao registrar uma partida da
+  liga o deck já vem preenchido.
+- **A cada liga nova**: quem já participa pode trocar de deck ou sair; gente nova pode
+  entrar.
+- **Registro para mesas justas**: guardar o histórico de cada pessoa (ligas jogadas,
+  deck de cada liga, posição final, partidas) para equilibrar as mesas quando entra
+  alguém novo.
+- **Nível de jogo** (vem da v1.4.1): usado para saber, na entrada da liga, se a pessoa
+  joga muito ou está começando, e evitar veteranos caindo em mesa com quem tem menos
+  experiência.
 - **Tudo automático**: o próprio app gera as rodadas seguintes, sem botão do root.
 - **Pareamento balanceado** para 11 inscritos: equilibrar quem enfrenta quem, quem
   descansa na rodada e a ordem dos assentos (1–4).
@@ -184,8 +212,13 @@ partida, o que basta para V/K/D sem mudar o cadastro de partidas.
 - [ ] Grande Final: uma mesa só ou melhor de 3? O 1º da tabela tem alguma vantagem
       (escolher assento)?
 - [ ] Inscrições: período (ex.: fevereiro) e quem sai no meio do ano
-- [ ] Deck fixo: vale o ano todo ou pode trocar entre o 1º e o 2º turno? Pode mexer
-      nas cartas (mantendo o comandante)? Vale deck emprestado (com permissão do dono)?
+- [ ] Deck emprestado (com permissão do dono) vale na inscrição?
+- [ ] Nível: como calcular (proposta: rating multiplayer tipo OpenSkill/TrueSkill,
+      calculado com todas as partidas aprovadas, com incerteza alta para quem tem
+      poucas partidas), se aparece para todo mundo e com que nomes (faixas neutras)
+- [ ] Nível na montagem das mesas: juntar níveis parecidos ou misturar? (numa liga em
+      que todo mundo deveria se enfrentar, juntar por nível conflita com o pareamento
+      balanceado)
 - [ ] Mínimo de inscritos para a liga começar (e o que fazer com mais de 11)
 - [ ] Convivência com as temporadas. Proposta: a partida da liga é uma partida
       normal marcada como "Liga" e conta também no ranking geral e na temporada;
