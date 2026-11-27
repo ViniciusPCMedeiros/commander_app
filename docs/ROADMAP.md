@@ -131,24 +131,17 @@ root invisível) está correto; typecheck e lint passam.
 - [ ] Apagar do banco local a temporada de teste e os dados de contratos
 - [ ] Ajustar a data provisória (11/12/2026) no changelog no dia do deploy
 
-## v1.6.0 — Rifa Mensal de Boosters (meados/fim de jan/2027)
-
-- [ ] Urna ao vivo: 1 bilhete por partida aprovada no mês
-- [ ] Sorteio auditável no `/admin`
-- A definir: o root participa? (hoje ele é invisível e nunca pontua); partida recusada
-  depois do sorteio; bilhetes por mês do calendário (fuso de São Paulo)
-
-## v1.6.x — Gráficos de análise (em alguma versão da 1.6)
-
-- [ ] Gráficos de análise: evolução de pontos, desempenho por deck/cor etc.
-- A definir: quais gráficos, onde aparecem (perfil, ranking, temporada) e a biblioteca
-
-## v1.7.0 — Simulador Suíço 1v1 (fim de jan / início de fev/2027)
+## v1.6.0 — Simulador Suíço 1v1 (fim de jan / início de fev/2027)
 
 - [ ] Página `/draft` isolada (não mexe no ranking, temporadas nem conquistas)
 - [ ] Para Drafts e o Pré-Release do Caos
 - [ ] 3 rodadas para 6 ativos, ou 4 rodadas para 11 inscritos
 - A definir: bye com número ímpar, desempates (OMW%, GW%), melhor de 1 ou de 3
+
+## v1.6.x — Gráficos de análise (em alguma versão da 1.6)
+
+- [ ] Gráficos de análise: evolução de pontos, desempenho por deck/cor etc.
+- A definir: quais gráficos, onde aparecem (perfil, ranking, temporada) e a biblioteca
 
 ## Migração para a nuvem (fev/2027)
 
@@ -165,6 +158,18 @@ root invisível) está correto; typecheck e lint passam.
   - Migrar os dados do banco atual (usuários do Auth, partidas, decks, conquistas,
     temporadas) e as imagens de `public/banners`.
   - Nesse ponto já dá para usar HTTPS e trocar todos os segredos.
+  - **Escala (pensando em ~500 pessoas):** hoje várias telas recalculam tudo do
+    histórico a cada acesso, lendo todas as partidas aprovadas (`fetchAll`, em
+    blocos de 1.000). Com ~25 mil participações por ano, isso deixa as páginas
+    lentas e gasta o limite de tráfego do Supabase Free. Antes de o grupo crescer,
+    passar para o modelo "calcula uma vez e grava" (igual às conquistas e ao nível
+    da v1.4.1, que já é gravado em tabela):
+    - [ ] Ranking "Desde sempre" e por período (`loadRanking`)
+    - [ ] Conquistas (`computeAllAchievements` roda inteiro a cada sincronização)
+    - [ ] Rivalidades e estatísticas do perfil
+    - [ ] A sincronização de 5 min só recalcular quando algo mudou (o tráfego
+      servidor ↔ banco também conta no limite)
+    - [ ] Paginação/busca nas listas de pessoas (página Níveis, ranking)
 - Coincide com a temporada **Nauctis**: evitar migrar no meio de um encerramento de
   temporada.
 
@@ -228,6 +233,11 @@ partida, o que basta para V/K/D sem mudar o cadastro de partidas.
 
 ## Futuro (sem data)
 
+- [ ] **Rifa Mensal de Boosters** (era a v1.6.0; adiada, ainda sem data)
+  - [ ] Urna ao vivo: 1 bilhete por partida aprovada no mês
+  - [ ] Sorteio auditável no `/admin`
+  - A definir: o root participa? (hoje ele é invisível e nunca pontua); partida recusada
+    depois do sorteio; bilhetes por mês do calendário (fuso de São Paulo)
 - [ ] Temporada temática **Nauctis** (fevereiro/2027): definir mecânicas, conquistas
   temáticas e arte
 - [ ] Upload da arte do tema pelo Admin (hoje é um arquivo em `public/banners`)
